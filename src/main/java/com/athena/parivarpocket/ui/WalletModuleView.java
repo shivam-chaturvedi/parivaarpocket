@@ -10,7 +10,6 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -35,7 +34,6 @@ public class WalletModuleView extends VBox {
 
         List<WalletEntry> entries = repository.loadWallet(user);
         getChildren().add(buildBudgetPanel(entries));
-        getChildren().add(buildBreakdownPanel());
         getChildren().add(buildOptimizationPanel(entries));
         getChildren().add(buildExpenseDistribution(entries));
     }
@@ -69,79 +67,35 @@ public class WalletModuleView extends VBox {
         return panel;
     }
 
-    private Panel buildBreakdownPanel() {
-        List<BudgetLine> lines = List.of(
-                new BudgetLine("Food & Groceries", "₹2,000", "₹2,200", "₹1,800", "Over by ₹200"),
-                new BudgetLine("Transportation", "₹800", "₹900", "₹750", "Over by ₹100"),
-                new BudgetLine("Education", "₹1,500", "₹1,500", "₹1,500", "√ On Track"),
-                new BudgetLine("Utilities", "₹600", "₹700", "₹600", "Over by ₹100"),
-                new BudgetLine("Entertainment", "₹400", "₹500", "₹300", "Over by ₹100")
-        );
-
-        GridPane table = new GridPane();
-        table.setHgap(0);
-        table.setVgap(0);
-        table.addRow(0,
-                header("Category"),
-                header("Planned Budget"),
-                header("Actual Spending"),
-                header("Optimized Budget"),
-                header("Status")
-        );
-        for (int i = 0; i < lines.size(); i++) {
-            BudgetLine line = lines.get(i);
-            table.addRow(i + 1,
-                    cell(line.category, i % 2 == 1, i),
-                    cell(line.planned, i % 2 == 1, i),
-                    cell(line.actual, i % 2 == 1, i),
-                    cell(line.optimized, i % 2 == 1, i),
-                    statusCell(line.status, i % 2 == 1, i)
-            );
-        }
-
-        HBox totals = new HBox(12,
-                totalCell("TOTAL", "Planned: ₹5,300"),
-                totalCell("ACTUAL", "₹5,800"),
-                totalCell("OPTIMIZED", "₹4,950")
-        );
-        totals.setAlignment(Pos.CENTER_LEFT);
-        totals.setPadding(new Insets(6, 0, 0, 0));
-
-        VBox content = new VBox(6, table, totals);
-        content.setPadding(new Insets(8, 0, 0, 0));
-        Panel panel = new Panel("Monthly Budget Breakdown", content);
-        panel.getStyleClass().add("budget-panel");
-        return panel;
-    }
-
     private Panel buildOptimizationPanel(List<WalletEntry> entries) {
         List<BudgetRecommendation> recommendations = optimizer.recommend(entries);
-        VBox list = new VBox(6);
+        VBox recommendationsBox = new VBox(8);
+        Label header = new Label("Optimization Recommendations");
+        header.getStyleClass().add("optimization-title");
+        recommendationsBox.getChildren().add(header);
         recommendations.forEach(rec -> {
-            Label title = new Label(rec.getTitle());
-            title.getStyleClass().add("budget-recommendation-title");
-            Label detail = new Label(rec.getDetail());
-            detail.setWrapText(true);
-            Label impact = new Label("Impact: ₹" + Math.round(rec.getImpact()));
-            impact.getStyleClass().add("budget-impacts");
-            VBox block = new VBox(4, title, detail, impact);
-            block.setPadding(new Insets(8));
-            block.getStyleClass().add("budget-recommendation");
-            list.getChildren().add(block);
+            Label bullet = new Label("• " + rec.getDetail());
+            bullet.setWrapText(true);
+            bullet.getStyleClass().add("optimization-bullet");
+            recommendationsBox.getChildren().add(bullet);
         });
+        recommendationsBox.getStyleClass().add("optimization-recommendations");
+
         HBox stats = new HBox(12,
-                createSimpleStat("Potential Monthly Savings", "₹750"),
-                createSimpleStat("Yearly Impact", "₹9,000")
+                createOptimizationStat("Potential Monthly Savings", "₹750"),
+                createOptimizationStat("Yearly Impact", "₹9,000")
         );
         stats.setAlignment(Pos.CENTER_LEFT);
+        stats.getStyleClass().add("optimization-stats");
         stats.setPadding(new Insets(8, 0, 0, 0));
-        Button export = new Button("Export Budget Report (PDF)");
-        export.getStyleClass().add("export-button");
 
-        VBox content = new VBox(12, list, stats, export);
+        Button export = new Button("Export Budget Report (PDF)");
+        export.getStyleClass().add("optimization-export-button");
+
+        VBox content = new VBox(12, recommendationsBox, stats, export);
         content.setPadding(new Insets(10, 0, 0, 0));
         Panel panel = new Panel("Budget Optimization Analysis", content);
-        panel.getStyleClass().add("budget-panel");
+        panel.getStyleClass().addAll("budget-panel", "optimization-panel");
         return panel;
     }
 
@@ -154,6 +108,7 @@ public class WalletModuleView extends VBox {
                 new DistributionLine("Entertainment", 8.6)
         );
         VBox list = new VBox(8);
+        list.getStyleClass().add("expense-distribution-list");
         lines.forEach(line -> list.getChildren().add(distributionRow(line.category, line.percentage)));
 
         Panel panel = new Panel("Expense Distribution", list);
@@ -172,46 +127,14 @@ public class WalletModuleView extends VBox {
         return box;
     }
 
-    private Label header(String text) {
-        Label label = new Label(text);
-        label.getStyleClass().add("budget-table-header");
-        label.setMaxWidth(Double.MAX_VALUE);
-        return label;
-    }
-
-    private Label cell(String text, boolean dim, int rowIndex) {
-        Label label = new Label(text);
-        label.getStyleClass().add(dim ? "budget-table-cell dim" : "budget-table-cell");
-        label.getStyleClass().add(rowIndex % 2 == 0 ? "budget-table-row-even" : "budget-table-row-odd");
-        label.setMaxWidth(Double.MAX_VALUE);
-        return label;
-    }
-
-    private Label statusCell(String text, boolean dim, int rowIndex) {
-        Label label = new Label(text);
-        label.getStyleClass().add(dim ? "budget-status dim" : "budget-status");
-        label.getStyleClass().add(rowIndex % 2 == 0 ? "budget-table-row-even" : "budget-table-row-odd");
-        return label;
-    }
-
-    private VBox totalCell(String title, String value) {
+    private VBox createOptimizationStat(String title, String value) {
         Label label = new Label(title);
-        label.getStyleClass().add("budget-total-label");
+        label.getStyleClass().add("optimization-stat-label");
         Label val = new Label(value);
-        val.getStyleClass().add("budget-total-value");
-        VBox box = new VBox(2, val, label);
-        box.setPadding(new Insets(6));
-        return box;
-    }
-
-    private VBox createSimpleStat(String title, String value) {
-        Label label = new Label(title);
-        label.getStyleClass().add("budget-simple-label");
-        Label val = new Label(value);
-        val.getStyleClass().add("budget-simple-value");
+        val.getStyleClass().add("optimization-stat-value");
         VBox box = new VBox(4, label, val);
         box.setPadding(new Insets(12));
-        box.setStyle("-fx-background-color: #f3f3f3; -fx-border-color: #d5d5d5; -fx-border-width: 1;");
+        box.getStyleClass().add("optimization-stat-box");
         return box;
     }
 
@@ -232,10 +155,8 @@ public class WalletModuleView extends VBox {
         HBox row = new HBox(12, title, bar, pct);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(4, 0, 4, 0));
+        row.getStyleClass().add("expense-distribution-row");
         return row;
-    }
-
-    private record BudgetLine(String category, String planned, String actual, String optimized, String status) {
     }
 
     private record DistributionLine(String category, double percentage) {

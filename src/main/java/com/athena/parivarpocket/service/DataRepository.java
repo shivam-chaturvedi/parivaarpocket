@@ -62,10 +62,10 @@ public class DataRepository {
 
     public List<StudentProgress> getStudentsProgress() {
         return List.of(
-                new StudentProgress("Rajesh Kumar", 8, 12, 15, 82, 78, 1250, 3),
-                new StudentProgress("Priya Singh", 10, 12, 18, 89, 85, 1620, 5),
-                new StudentProgress("Amit Dutta", 6, 12, 9, 72, 64, 950, 2),
-                new StudentProgress("Sunita Shaw", 9, 12, 16, 91, 88, 1710, 4)
+                new StudentProgress("Rajesh Kumar", 8, 12, 15, 82, 78, 1250, 3, 5, 3200, 1),
+                new StudentProgress("Priya Sharma", 10, 12, 18, 91, 92, 1620, 5, 3, 4200, 0),
+                new StudentProgress("Amit Das", 4, 12, 8, 68, 65, 950, 1, 2, 800, 2),
+                new StudentProgress("Sneha Banerjee", 12, 12, 20, 95, 98, 1750, 7, 4, 6500, 0)
         );
     }
 

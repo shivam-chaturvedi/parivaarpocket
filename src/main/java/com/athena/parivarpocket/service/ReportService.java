@@ -45,6 +45,9 @@ public class ReportService {
                 Wallet Health: %.1f%%
                 ParivaarPoints: %d
                 Employment commitments: %d
+                Jobs saved for follow-up: %d
+                Wallet savings: ₹%d
+                Active alerts: %d
 
                 Guidance:
                 - Encourage consistent quiz practice to raise confidence.
@@ -52,13 +55,16 @@ public class ReportService {
                 - Pair with an educator mentor for job application prep.
                 """
                 .formatted(LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm")),
-                        progress.getStudentName(),
-                        progress.getModulesCompleted(),
-                        progress.getTotalModules(),
-                        progress.getQuizzesTaken(),
-                        progress.getAverageScore(),
-                        progress.getWalletHealthScore(),
-                        progress.getParivaarPoints(),
-                        progress.getEmploymentApplications());
+                progress.getStudentName(),
+                progress.getModulesCompleted(),
+                progress.getTotalModules(),
+                progress.getQuizzesTaken(),
+                progress.getAverageScore(),
+                progress.getWalletHealthScore(),
+                progress.getParivaarPoints(),
+                progress.getEmploymentApplications(),
+                progress.getJobSaves(),
+                progress.getWalletSavings(),
+                progress.getAlerts());
     }
 }

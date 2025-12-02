@@ -20,6 +20,7 @@ public class WorkModuleView extends VBox {
         setPadding(new Insets(0));
 
         getChildren().add(buildOverviewPanel(jobs));
+        getChildren().add(buildMonthlyBudgetPanel());
         getChildren().add(buildListingsPanel(jobs, offlineSyncService));
     }
 
@@ -51,6 +52,31 @@ public class WorkModuleView extends VBox {
         return panel;
     }
 
+    private Panel buildMonthlyBudgetPanel() {
+        List<BudgetLine> lines = List.of(
+                new BudgetLine("Food & Groceries", "₹2,000", "₹2,200", "₹1,800", "Over by ₹200"),
+                new BudgetLine("Transportation", "₹800", "₹900", "₹750", "Over by ₹100"),
+                new BudgetLine("Education", "₹1,500", "₹1,500", "₹1,500", "√ On Track"),
+                new BudgetLine("Utilities", "₹600", "₹700", "₹600", "Over by ₹100"),
+                new BudgetLine("Entertainment", "₹400", "₹500", "₹300", "Over by ₹100")
+        );
+
+        VBox table = new VBox();
+        table.setSpacing(0);
+        table.getStyleClass().add("monthly-budget-table");
+        table.getChildren().add(headerRow());
+        for (int i = 0; i < lines.size(); i++) {
+            table.getChildren().add(dataRow(lines.get(i), i));
+        }
+        table.getChildren().add(totalRow());
+
+        VBox content = new VBox(table);
+        content.setPadding(new Insets(8, 0, 0, 0));
+        Panel panel = new Panel("Monthly Budget Breakdown", content);
+        panel.getStyleClass().add("monthly-budget-panel");
+        return panel;
+    }
+
     private VBox createSummaryCard(String value, String label) {
         Label number = new Label(value);
         number.getStyleClass().add("work-stat-value");
@@ -62,6 +88,86 @@ public class WorkModuleView extends VBox {
         box.setPrefWidth(180);
         box.setAlignment(Pos.CENTER);
         return box;
+    }
+
+    private HBox headerRow() {
+        HBox row = new HBox();
+        row.getStyleClass().addAll("monthly-budget-row", "monthly-budget-header-row");
+        row.getChildren().addAll(
+                headerCell("Category"),
+                headerCell("Planned Budget"),
+                headerCell("Actual Spending"),
+                headerCell("Optimized Budget"),
+                headerCell("Status")
+        );
+        return row;
+    }
+
+    private HBox dataRow(BudgetLine line, int index) {
+        HBox row = new HBox();
+        row.getStyleClass().add("monthly-budget-row");
+        if (index % 2 == 1) {
+            row.getStyleClass().add("monthly-budget-row-alt");
+        }
+        row.getChildren().addAll(
+                dataCell(line.category, true),
+                dataCell(line.planned, false),
+                dataCell(line.actual, false),
+                dataCell(line.optimized, false),
+                statusCell(line.status)
+        );
+        return row;
+    }
+
+    private HBox totalRow() {
+        HBox row = new HBox();
+        row.getStyleClass().addAll("monthly-budget-row", "monthly-budget-total-row");
+        row.getChildren().addAll(
+                totalCell("TOTAL"),
+                totalCell("₹5,300"),
+                totalCell("₹5,800"),
+                totalCell("₹4,950"),
+                new Label()
+        );
+        return row;
+    }
+
+    private Label headerCell(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().addAll("monthly-budget-cell", "monthly-budget-header");
+        label.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(label, Priority.ALWAYS);
+        return label;
+    }
+
+    private Label dataCell(String text, boolean isCategory) {
+        Label label = new Label(text);
+        label.getStyleClass().add("monthly-budget-cell");
+        if (isCategory) {
+            label.getStyleClass().add("monthly-budget-cell-category");
+            label.setAlignment(Pos.CENTER_LEFT);
+        } else {
+            label.setAlignment(Pos.CENTER);
+        }
+        label.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(label, Priority.ALWAYS);
+        return label;
+    }
+
+    private Label statusCell(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("monthly-status-pill");
+        label.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(label, Priority.ALWAYS);
+        return label;
+    }
+
+    private Label totalCell(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("monthly-budget-total-cell");
+        label.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(label, Priority.ALWAYS);
+        return label;
     }
 
     private Panel buildListingsPanel(List<JobOpportunity> jobs, OfflineSyncService offlineSyncService) {
@@ -117,5 +223,8 @@ public class WorkModuleView extends VBox {
         Label label = new Label(text);
         label.getStyleClass().add("job-badge");
         return label;
+    }
+
+    private record BudgetLine(String category, String planned, String actual, String optimized, String status) {
     }
 }

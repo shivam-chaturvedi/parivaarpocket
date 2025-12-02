@@ -9,9 +9,21 @@ public class StudentProgress {
     private final double walletHealthScore;
     private final int parivaarPoints;
     private final int employmentApplications;
+    private final int jobSaves;
+    private final int walletSavings;
+    private final int alerts;
 
-    public StudentProgress(String studentName, int modulesCompleted, int totalModules, int quizzesTaken,
-                           double averageScore, double walletHealthScore, int parivaarPoints, int employmentApplications) {
+    public StudentProgress(String studentName,
+                           int modulesCompleted,
+                           int totalModules,
+                           int quizzesTaken,
+                           double averageScore,
+                           double walletHealthScore,
+                           int parivaarPoints,
+                           int employmentApplications,
+                           int jobSaves,
+                           int walletSavings,
+                           int alerts) {
         this.studentName = studentName;
         this.modulesCompleted = modulesCompleted;
         this.totalModules = totalModules;
@@ -20,6 +32,9 @@ public class StudentProgress {
         this.walletHealthScore = walletHealthScore;
         this.parivaarPoints = parivaarPoints;
         this.employmentApplications = employmentApplications;
+        this.jobSaves = jobSaves;
+        this.walletSavings = walletSavings;
+        this.alerts = alerts;
     }
 
     public String getStudentName() {
@@ -52,5 +67,17 @@ public class StudentProgress {
 
     public int getEmploymentApplications() {
         return employmentApplications;
+    }
+
+    public int getJobSaves() {
+        return jobSaves;
+    }
+
+    public int getWalletSavings() {
+        return walletSavings;
+    }
+
+    public int getAlerts() {
+        return alerts;
     }
 }
