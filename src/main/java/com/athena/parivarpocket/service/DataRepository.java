@@ -1,72 +1,88 @@
 package com.athena.parivarpocket.service;
 
 import com.athena.parivarpocket.model.*;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class DataRepository {
     private final LocalStoreService storeService;
     private final Map<String, List<WalletEntry>> walletEntries = new HashMap<>();
+    private final SupabaseClient supabaseClient = new SupabaseClient();
+    private volatile List<Lesson> lessonsCache;
+    private volatile List<QuizResult> quizCache;
+    private volatile List<JobOpportunity> jobCache;
+    private volatile List<NotificationItem> notificationsCache;
+    private volatile List<StudentProgress> studentProgressCache;
+    private volatile List<WalletEntry> walletCache;
+    private User currentUser;
 
     public DataRepository(LocalStoreService storeService) {
         this.storeService = storeService;
     }
 
+    public synchronized void prefetchAll(User user) {
+        this.currentUser = user;
+        walletEntries.clear();
+        lessonsCache = mapTable("lessons", null, this::toLesson);
+        quizCache = mapTable("quiz_results", null, this::toQuizResult);
+        jobCache = mapTable("job_opportunities", null, this::toJobOpportunity);
+        notificationsCache = mapTable("notifications", null, this::toNotification);
+        studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
+        walletCache = fetchWalletFromSupabase(user);
+        if (notificationsCache.isEmpty()) {
+            notificationsCache = List.of(new NotificationItem(
+                    "Welcome",
+                    "We are syncing notifications from Supabase—nothing new yet.",
+                    "info",
+                    LocalDate.now()));
+        }
+    }
+
     public List<Lesson> getLessons() {
-        return List.of(
-                new Lesson("Budgeting Basics", "Beginner", "Understand income, expenses, and how to build a safe budget.", 70, 3, 5),
-                new Lesson("Smart Saving", "Intermediate", "Set savings goals and track them with alerts and reminders.", 40, 2, 4),
-                new Lesson("Responsible Spending", "Intermediate", "Plan needs vs wants and avoid unnecessary costs.", 55, 2, 4),
-                new Lesson("Earning & Employability", "Advanced", "Explore local jobs, safety checks, and application skills.", 25, 1, 3)
-        );
+        if (lessonsCache != null) {
+            return lessonsCache;
+        }
+        return mapTable("lessons", null, this::toLesson);
     }
 
     public List<QuizResult> getQuizResults() {
-        return List.of(
-                new QuizResult("Budget Planner Quiz", 92, "Intermediate", 120),
-                new QuizResult("Savings Safety", 78, "Beginner", 80),
-                new QuizResult("Job Readiness", 84, "Advanced", 140)
-        );
+        if (quizCache != null) {
+            return quizCache;
+        }
+        return mapTable("quiz_results", null, this::toQuizResult);
     }
 
     public List<JobOpportunity> getJobOpportunities() {
-        return List.of(
-                new JobOpportunity("Mathematics Tutor", "Learn & Grow Academy", "Kolkata", "Tutoring",
-                        "Part-time (10-15 hrs/week)", "₹3,000 - ₹5,000/month",
-                        List.of("Grade 8-10 maths", "Communication"), "Work only with school references", "call: 90000-00001", 86),
-                new JobOpportunity("Delivery Associate", "QuickDeliver Services", "Howrah", "Delivery",
-                        "Full-time (40 hrs/week)", "₹8,000 - ₹12,000/month",
-                        List.of("Road safety", "Time management"), "Helmet + reflective jacket required", "call: 90000-00002", 74),
-                new JobOpportunity("Retail Sales Assistant", "StyleMart Fashion", "Park Street, Kolkata", "Retail",
-                        "Full-time (48 hrs/week)", "₹6,000 - ₹9,000/month",
-                        List.of("Cataloging", "Customer help"), "Work in pairs; CCTV monitored", "email: hello@local.org", 65),
-                new JobOpportunity("Data Entry Intern", "TechSolutions Pvt Ltd", "Salt Lake, Kolkata", "Internship",
-                        "Full-time (6 months)", "₹5,000 - ₹7,000/month",
-                        List.of("Basic Excel", "Accuracy"), "Secure office; ID required on entry", "call: 90000-00003", 90),
-                new JobOpportunity("STEM Workshop Assistant", "Park Circus Learners", "Park Circus", "Tutoring",
-                        "Sundays • 4 hrs/week", "₹3,500 - ₹5,000/month",
-                        List.of("STEM kits", "Team support"), "Teacher present at all times", "email: safejobs@ngo.org", 82)
-        );
+        if (jobCache != null) {
+            return jobCache;
+        }
+        return mapTable("job_opportunities", null, this::toJobOpportunity);
     }
 
     public List<NotificationItem> getNotifications(User user) {
-        return List.of(
-                new NotificationItem("Wallet Alert", "Spending on transport exceeded the weekly budget.", "warning", LocalDate.now().minusDays(1)),
-                new NotificationItem("Quiz Reminder", "Practice \"Savings Safety\" quiz to unlock ParivaarCoins.", "info", LocalDate.now().minusDays(2)),
-                new NotificationItem("New Job", "Verified \"STEM Workshop Assistant\" opportunity added in Park Circus.", "success", LocalDate.now()),
-                new NotificationItem("Educator Note", user.getRole() == UserRole.STUDENT ? "Your mentor flagged missing receipts for last week." : "3 students crossed expense limits.", "info", LocalDate.now().minusDays(3))
-        );
+        List<NotificationItem> base = notificationsCache != null ? notificationsCache : mapTable("notifications", null, this::toNotification);
+        List<NotificationItem> result = new ArrayList<>(base);
+        String noteText = user.getRole() == UserRole.STUDENT
+                ? "Your mentor flagged missing receipts for last week."
+                : "3 students crossed expense limits.";
+        result.add(new NotificationItem("Educator Note", noteText, "info", LocalDate.now().minusDays(3)));
+        return result;
     }
 
     public List<StudentProgress> getStudentsProgress() {
-        return List.of(
-                new StudentProgress("Rajesh Kumar", 8, 12, 15, 82, 78, 1250, 3, 5, 3200, 1),
-                new StudentProgress("Priya Sharma", 10, 12, 18, 91, 92, 1620, 5, 3, 4200, 0),
-                new StudentProgress("Amit Das", 4, 12, 8, 68, 65, 950, 1, 2, 800, 2),
-                new StudentProgress("Sneha Banerjee", 12, 12, 20, 95, 98, 1750, 7, 4, 6500, 0)
-        );
+        if (studentProgressCache != null) {
+            return studentProgressCache;
+        }
+        return mapTable("student_progress", null, this::toStudentProgress);
     }
 
     public List<WalletEntry> loadWallet(User user) {
@@ -74,9 +90,16 @@ public class DataRepository {
         if (walletEntries.containsKey(key)) {
             return walletEntries.get(key);
         }
-        List<WalletEntry> entries = new ArrayList<>(storeService.loadWalletEntries(user));
+        List<WalletEntry> entries = walletCache != null && currentUser != null && keyForUser(currentUser).equals(key)
+                ? walletCache
+                : fetchWalletFromSupabase(user);
         if (entries.isEmpty()) {
-            entries.addAll(defaultWallet());
+            entries = new ArrayList<>(storeService.loadWalletEntries(user));
+            if (entries.isEmpty()) {
+                entries.addAll(defaultWallet());
+            }
+        } else {
+            storeService.saveWalletEntries(user, entries);
         }
         walletEntries.put(key, entries);
         return entries;
@@ -112,6 +135,171 @@ public class DataRepository {
         return entries.stream()
                 .filter(e -> e.getType() == WalletEntryType.EXPENSE)
                 .collect(Collectors.groupingBy(WalletEntry::getCategory, Collectors.summingDouble(WalletEntry::getAmount)));
+    }
+
+    private <T> List<T> mapTable(String table, String query, Function<JsonObject, T> mapper) {
+        return mapTable(table, query, mapper, null);
+    }
+
+    private <T> List<T> mapTable(String table, String query, Function<JsonObject, T> mapper, String bearerToken) {
+        try {
+            JsonArray data = supabaseClient.fetchTable(table, query, bearerToken);
+            List<T> records = new ArrayList<>();
+            if (data != null) {
+                for (JsonElement element : data) {
+                    if (!element.isJsonObject()) {
+                        continue;
+                    }
+                    T mapped = mapper.apply(element.getAsJsonObject());
+                    if (mapped != null) {
+                        records.add(mapped);
+                    }
+                }
+            }
+            return List.copyOf(records);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private Lesson toLesson(JsonObject json) {
+        return new Lesson(
+                safeString(json, "title", "Untitled lesson"),
+                safeString(json, "difficulty", "Beginner"),
+                safeString(json, "description", "Details coming soon."),
+                safeInt(json, "progress_percent", 0),
+                safeInt(json, "quizzes_completed", 0),
+                safeInt(json, "quizzes_total", 0)
+        );
+    }
+
+    private QuizResult toQuizResult(JsonObject json) {
+        return new QuizResult(
+                safeString(json, "title", "Quiz"),
+                safeInt(json, "score", 0),
+                safeString(json, "difficulty", "Beginner"),
+                safeInt(json, "coins_awarded", 0)
+        );
+    }
+
+    private JobOpportunity toJobOpportunity(JsonObject json) {
+        return new JobOpportunity(
+                safeString(json, "title", "Job Opportunity"),
+                safeString(json, "company", "Partner Organisation"),
+                safeString(json, "location", "Unknown"),
+                safeString(json, "category", "General"),
+                safeString(json, "hours", "Flexible hours"),
+                safeString(json, "pay_range", "Negotiable"),
+                safeStringList(json, "required_skills"),
+                safeString(json, "safety_notes", ""),
+                safeString(json, "contact", ""),
+                safeInt(json, "suitability_score", 0)
+        );
+    }
+
+    private NotificationItem toNotification(JsonObject json) {
+        return new NotificationItem(
+                safeString(json, "title", "New update"),
+                safeString(json, "description", ""),
+                safeString(json, "severity", "info"),
+                safeDate(json, "notify_date", LocalDate.now())
+        );
+    }
+
+    private StudentProgress toStudentProgress(JsonObject json) {
+        return new StudentProgress(
+                safeString(json, "student_name", "Student"),
+                safeInt(json, "modules_completed", 0),
+                safeInt(json, "total_modules", 1),
+                safeInt(json, "quizzes_taken", 0),
+                safeDouble(json, "average_score", 0),
+                safeDouble(json, "wallet_health_score", 0),
+                safeInt(json, "parivaar_points", 0),
+                safeInt(json, "employment_applications", 0),
+                safeInt(json, "job_saves", 0),
+                safeInt(json, "wallet_savings", 0),
+                safeInt(json, "alerts", 0)
+        );
+    }
+
+    private List<WalletEntry> fetchWalletFromSupabase(User user) {
+        if (user == null || user.getEmail() == null) {
+            return List.of();
+        }
+        String encodedEmail = URLEncoder.encode(user.getEmail().toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
+        String query = "owner_email=eq." + encodedEmail + "&order=entry_date.desc";
+        return mapTable("wallet_entries", query, this::toWalletEntry, user.getAccessToken());
+    }
+
+    private WalletEntry toWalletEntry(JsonObject json) {
+        WalletEntryType type = WalletEntryType.fromString(safeString(json, "entry_type", "expense"));
+        return new WalletEntry(
+                type,
+                safeString(json, "category", "General"),
+                safeDouble(json, "amount", 0),
+                safeString(json, "note", ""),
+                safeDate(json, "entry_date", LocalDate.now())
+        );
+    }
+
+    private String safeString(JsonObject json, String key, String fallback) {
+        if (json.has(key) && !json.get(key).isJsonNull()) {
+            return json.get(key).getAsString();
+        }
+        return fallback;
+    }
+
+    private int safeInt(JsonObject json, String key, int fallback) {
+        if (json.has(key) && !json.get(key).isJsonNull()) {
+            try {
+                return json.get(key).getAsInt();
+            } catch (Exception ignored) {
+            }
+        }
+        return fallback;
+    }
+
+    private double safeDouble(JsonObject json, String key, double fallback) {
+        if (json.has(key) && !json.get(key).isJsonNull()) {
+            try {
+                return json.get(key).getAsDouble();
+            } catch (Exception ignored) {
+            }
+        }
+        return fallback;
+    }
+
+    private List<String> safeStringList(JsonObject json, String key) {
+        if (json.has(key) && !json.get(key).isJsonNull()) {
+            JsonElement element = json.get(key);
+            if (element.isJsonArray()) {
+                List<String> values = new ArrayList<>();
+                for (JsonElement entry : element.getAsJsonArray()) {
+                    if (!entry.isJsonNull()) {
+                        values.add(entry.getAsString());
+                    }
+                }
+                return values;
+            }
+            String raw = element.getAsString();
+            if (!raw.isBlank()) {
+                return List.of(raw.split(","));
+            }
+        }
+        return List.of();
+    }
+
+    private LocalDate safeDate(JsonObject json, String key, LocalDate fallback) {
+        if (json.has(key) && !json.get(key).isJsonNull()) {
+            String raw = json.get(key).getAsString();
+            if (!raw.isBlank()) {
+                try {
+                    return LocalDate.parse(raw);
+                } catch (DateTimeParseException ignored) {
+                }
+            }
+        }
+        return fallback;
     }
 
     private String keyForUser(User user) {

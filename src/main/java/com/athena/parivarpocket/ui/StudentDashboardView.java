@@ -36,7 +36,8 @@ public class StudentDashboardView extends VBox {
         getChildren().add(buildWelcomePanel(user, modulesCompleted, lessons.size(), coins, badgeLabel));
         getChildren().add(buildLearningProgress(modulesCompleted, lessons.size(), quizzesTaken, averageScore, bestScore));
         getChildren().add(buildWalletSummary(repository, user));
-        getChildren().add(buildBookmarkedJobs(repository.getJobOpportunities().subList(0, 3)));
+        List<JobOpportunity> jobOpportunities = repository.getJobOpportunities();
+        getChildren().add(buildBookmarkedJobs(jobOpportunities));
     }
 
     private Panel buildWelcomePanel(User user,
@@ -132,8 +133,14 @@ public class StudentDashboardView extends VBox {
     }
 
     private Panel buildBookmarkedJobs(List<JobOpportunity> jobs) {
+        if (jobs.isEmpty()) {
+            return new Panel("Bookmarked Opportunities", new Label("No jobs available right now."));
+        }
+        int previewSize = Math.min(jobs.size(), 3);
+        List<JobOpportunity> preview = jobs.subList(0, previewSize);
+
         VBox box = new VBox(12);
-        jobs.forEach(job -> {
+        preview.forEach(job -> {
             Label title = new Label(job.getTitle());
             title.setStyle("-fx-font-weight: 700; -fx-font-size: 15px;");
             Label meta = new Label(job.getLocation() + " • " + job.getCategory());

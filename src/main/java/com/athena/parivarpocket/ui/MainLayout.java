@@ -7,11 +7,16 @@ import com.athena.parivarpocket.service.BudgetOptimizer;
 import com.athena.parivarpocket.service.DataRepository;
 import com.athena.parivarpocket.service.OfflineSyncService;
 import com.athena.parivarpocket.service.ReportService;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+
+import java.util.concurrent.CompletableFuture;
 
 public class MainLayout {
     private final BorderPane root = new BorderPane();
@@ -22,6 +27,9 @@ public class MainLayout {
     private final ReportService reportService;
     private MainTab activeTab = MainTab.DASHBOARD;
     private final Runnable onLogout;
+    private final StackPane centerWrapper = new StackPane();
+    private final ProgressIndicator loader = new ProgressIndicator();
+    private boolean dataLoaded = false;
 
     public MainLayout(User user,
                       DataRepository repository,
@@ -35,7 +43,11 @@ public class MainLayout {
         this.offlineSyncService = offlineSyncService;
         this.reportService = reportService;
         this.onLogout = onLogout;
+        loader.setMaxSize(48, 48);
+        centerWrapper.getChildren().add(loader);
+        root.setCenter(centerWrapper);
         render();
+        prefetchData(user);
     }
 
     public BorderPane getView() {
@@ -46,7 +58,8 @@ public class MainLayout {
         SidebarView sidebar = new SidebarView(user, activeTab, this::setActiveTab, onLogout, offlineSyncService);
         root.setLeft(sidebar);
         root.setTop(null);
-        root.setCenter(buildScrollableContent(activeTab));
+        root.setCenter(centerWrapper);
+        refreshContent();
     }
 
     private Node buildScrollableContent(MainTab tab) {
@@ -83,7 +96,7 @@ public class MainLayout {
 
     private void setActiveTab(MainTab tab) {
         this.activeTab = tab;
-        render();
+        refreshContent();
     }
 
     private Node contentForTab(MainTab tab) {
@@ -96,5 +109,31 @@ public class MainLayout {
             case WALLET -> new WalletModuleView(repository, user, optimizer, offlineSyncService);
             case NOTIFICATIONS -> new NotificationsView(repository.getNotifications(user), offlineSyncService);
         };
+    }
+
+    private void refreshContent() {
+        if (!dataLoaded) {
+            showLoading();
+            return;
+        }
+        showContent(buildScrollableContent(activeTab));
+    }
+
+    private void showLoading() {
+        centerWrapper.getChildren().setAll(loader);
+    }
+
+    private void showContent(Node content) {
+        centerWrapper.getChildren().setAll(content);
+    }
+
+    private void prefetchData(User user) {
+        CompletableFuture.runAsync(() -> {
+            repository.prefetchAll(user);
+            Platform.runLater(() -> {
+                dataLoaded = true;
+                render();
+            });
+        });
     }
 }

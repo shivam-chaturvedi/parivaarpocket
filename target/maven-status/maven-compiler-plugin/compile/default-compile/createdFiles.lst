@@ -15,6 +15,7 @@ com/athena/parivarpocket/service/LocalDateAdapter.class
 com/athena/parivarpocket/ui/EducatorDashboardView$4.class
 com/athena/parivarpocket/ui/EducatorDashboardView.class
 com/athena/parivarpocket/model/WalletEntryType.class
+com/athena/parivarpocket/service/SupabaseClient.class
 com/athena/parivarpocket/model/Lesson.class
 com/athena/parivarpocket/model/UserRole.class
 com/athena/parivarpocket/model/QuizResult.class

@@ -3,14 +3,22 @@ package com.athena.parivarpocket.model;
 import java.util.Objects;
 
 public class User {
+    private final String id;
     private final String email;
     private final String name;
     private final UserRole role;
+    private final String accessToken;
 
-    public User(String email, String name, UserRole role) {
+    public User(String id, String email, String name, UserRole role, String accessToken) {
+        this.id = id;
         this.email = email;
         this.name = name;
         this.role = role;
+        this.accessToken = accessToken;
+    }
+
+    public String getId() {
+        return id;
     }
 
     public String getEmail() {
@@ -23,6 +31,10 @@ public class User {
 
     public UserRole getRole() {
         return role;
+    }
+
+    public String getAccessToken() {
+        return accessToken;
     }
 
     @Override

@@ -18,6 +18,7 @@
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/WalletEntry.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/MainLayout.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/ReportService.java
+/Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/SupabaseClient.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/SidebarView.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/LocalDateAdapter.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/WorkModuleView.java
