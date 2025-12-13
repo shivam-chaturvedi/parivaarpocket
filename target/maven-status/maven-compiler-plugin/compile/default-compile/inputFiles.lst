@@ -5,13 +5,16 @@
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/PageHeader.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/NotificationItem.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/EducatorDashboardView.java
+/Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/BudgetGoal.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/LoginView.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/BudgetRecommendation.java
+/Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/RapidJobService.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/UserRole.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/User.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/MainTab.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/CryptoService.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/JobOpportunity.java
+/Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/ProfileService.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/QuizResult.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/WalletEntryType.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/LearningModuleView.java
@@ -20,6 +23,7 @@
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/ReportService.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/SupabaseClient.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/SidebarView.java
+/Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/QuizDefinition.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/LocalDateAdapter.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/WorkModuleView.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/DataRepository.java
@@ -27,7 +31,10 @@
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/Lesson.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/Card.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/NotificationsView.java
+/Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/QuizAttempt.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/ui/Panel.java
+/Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/LessonCompletion.java
+/Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/model/QuizQuestion.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/App.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/LocalStoreService.java
 /Users/Shared/shivam/parivaarpocket/src/main/java/com/athena/parivarpocket/service/BudgetOptimizer.java

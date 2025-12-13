@@ -1,230 +1,253 @@
 package com.athena.parivarpocket.ui;
 
 import com.athena.parivarpocket.model.JobOpportunity;
-import com.athena.parivarpocket.service.OfflineSyncService;
+import com.athena.parivarpocket.service.DataRepository;
+import com.athena.parivarpocket.service.RapidJobService;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.control.Button;
-import javafx.scene.control.ChoiceBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextField;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
+import javafx.scene.Node;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
 
+import java.awt.Desktop;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class WorkModuleView extends VBox {
-    public WorkModuleView(List<JobOpportunity> jobs, OfflineSyncService offlineSyncService) {
+    private final DataRepository repository;
+    private final RapidJobService rapidJobService = new RapidJobService();
+    private final TextField searchField = new TextField();
+    private final ChoiceBox<String> categoryFilter = new ChoiceBox<>();
+    private final ChoiceBox<String> locationFilter = new ChoiceBox<>();
+    private final CheckBox verifiedOnly = new CheckBox("Verified jobs only");
+    private final ProgressIndicator loadingIndicator = new ProgressIndicator();
+    private final VBox contentHolder = new VBox();
+
+    private List<JobOpportunity> allJobs = new ArrayList<>();
+
+    public WorkModuleView(DataRepository repository) {
+        this.repository = repository;
         setSpacing(18);
         setPadding(new Insets(0));
-
-        getChildren().add(buildOverviewPanel(jobs));
-        getChildren().add(buildMonthlyBudgetPanel());
-        getChildren().add(buildListingsPanel(jobs, offlineSyncService));
+        loadingIndicator.setVisible(false);
+        loadingIndicator.setPrefSize(32, 32);
+        getChildren().addAll(buildHeader(), contentHolder);
+        fetchJobs();
     }
 
-    private Panel buildOverviewPanel(List<JobOpportunity> jobs) {
-        TextField search = new TextField();
-        search.setPromptText("Search jobs by title, company, or location...");
-        search.setPrefWidth(360);
+    private Node buildHeader() {
+        Label title = new Label("Employment Opportunities");
+        title.getStyleClass().add("work-page-title");
+
+        searchField.setPromptText("Search by role, company, location...");
+        searchField.setPrefWidth(360);
+        searchField.getStyleClass().add("job-search-input");
+
         Button searchBtn = new Button("Search");
         searchBtn.getStyleClass().add("primary-button");
-        search.getStyleClass().add("card-text-input");
-        ChoiceBox<String> category = new ChoiceBox<>();
-        category.getItems().addAll("All Categories", "Tutoring", "Delivery", "Retail", "Internship");
-        category.getSelectionModel().selectFirst();
-        category.getStyleClass().add("card-choice-box");
-        HBox searchRow = new HBox(10, search, searchBtn, category);
+        searchBtn.setOnAction(e -> refreshListings());
+
+        categoryFilter.getItems().add("All categories");
+        categoryFilter.getSelectionModel().selectFirst();
+        categoryFilter.getStyleClass().add("job-filter-choice");
+
+        locationFilter.getItems().add("All locations");
+        locationFilter.getSelectionModel().selectFirst();
+        locationFilter.getStyleClass().add("job-filter-choice");
+
+        verifiedOnly.setOnAction(e -> refreshListings());
+
+        HBox searchRow = new HBox(10, searchField, searchBtn, loadingIndicator);
         searchRow.setAlignment(Pos.CENTER_LEFT);
 
-        HBox stats = new HBox(10,
-                createSummaryCard(String.valueOf(jobs.size()), "Available Jobs"),
-                createSummaryCard(String.valueOf((int) jobs.stream().filter(j -> j.getSuitabilityScore() >= 80).count()), "Verified Safe"),
-                createSummaryCard("3", "Bookmarked")
-        );
-        stats.setAlignment(Pos.CENTER);
-        stats.setPadding(new Insets(6, 0, 0, 0));
+        HBox filters = new HBox(10, categoryFilter, locationFilter, verifiedOnly);
+        filters.setAlignment(Pos.CENTER_LEFT);
 
-        VBox content = new VBox(12, searchRow, stats);
-        Panel panel = new Panel("Local Employment Opportunities", content);
-        panel.getStyleClass().add("work-overview-panel");
-        return panel;
+        VBox header = new VBox(10, title, searchRow, filters);
+        header.setPadding(new Insets(10, 6, 6, 6));
+        header.getStyleClass().add("work-page-header");
+        return header;
     }
 
-    private Panel buildMonthlyBudgetPanel() {
-        List<BudgetLine> lines = List.of(
-                new BudgetLine("Food & Groceries", "₹2,000", "₹2,200", "₹1,800", "Over by ₹200"),
-                new BudgetLine("Transportation", "₹800", "₹900", "₹750", "Over by ₹100"),
-                new BudgetLine("Education", "₹1,500", "₹1,500", "₹1,500", "√ On Track"),
-                new BudgetLine("Utilities", "₹600", "₹700", "₹600", "Over by ₹100"),
-                new BudgetLine("Entertainment", "₹400", "₹500", "₹300", "Over by ₹100")
-        );
+    private void fetchJobs() {
+        loadingIndicator.setVisible(true);
+        Task<List<JobOpportunity>> task = new Task<>() {
+            @Override
+            protected List<JobOpportunity> call() throws Exception {
+                List<JobOpportunity> fetched = rapidJobService.fetchRecentWestBengalJobs();
+                if (fetched.isEmpty()) {
+                    return Collections.emptyList();
+                }
+                return fetched;
+            }
+        };
+        task.setOnSucceeded(event -> {
+            loadingIndicator.setVisible(false);
+            allJobs = new ArrayList<>(task.getValue());
+            populateFilters();
+            refreshListings();
+        });
+        task.setOnFailed(event -> {
+            loadingIndicator.setVisible(false);
+            contentHolder.getChildren().setAll(new Label("Unable to load job feed. Try again later."));
+        });
+        new Thread(task).start();
+    }
 
-        VBox table = new VBox();
-        table.setSpacing(0);
-        table.getStyleClass().add("monthly-budget-table");
-        table.getChildren().add(headerRow());
-        for (int i = 0; i < lines.size(); i++) {
-            table.getChildren().add(dataRow(lines.get(i), i));
+    private void populateFilters() {
+        categoryFilter.getItems().setAll("All categories");
+        locationFilter.getItems().setAll("All locations");
+        allJobs.stream()
+                .map(JobOpportunity::getCategory)
+                .filter(c -> c != null && !c.isBlank())
+                .distinct()
+                .sorted()
+                .forEach(categoryFilter.getItems()::add);
+        allJobs.stream()
+                .map(JobOpportunity::getLocation)
+                .filter(l -> l != null && !l.isBlank())
+                .distinct()
+                .sorted()
+                .forEach(locationFilter.getItems()::add);
+        categoryFilter.getSelectionModel().selectFirst();
+        locationFilter.getSelectionModel().selectFirst();
+    }
+
+    private void refreshListings() {
+        if (allJobs.isEmpty()) {
+            contentHolder.getChildren().setAll(new Label("No jobs found yet. Refresh in a bit."));
+            return;
         }
-        table.getChildren().add(totalRow());
-
-        VBox content = new VBox(table);
-        content.setPadding(new Insets(8, 0, 0, 0));
-        Panel panel = new Panel("Monthly Budget Breakdown", content);
-        panel.getStyleClass().add("monthly-budget-panel");
-        return panel;
-    }
-
-    private VBox createSummaryCard(String value, String label) {
-        Label number = new Label(value);
-        number.getStyleClass().add("work-stat-value");
-        Label caption = new Label(label);
-        caption.getStyleClass().add("work-stat-label");
-        VBox box = new VBox(2, number, caption);
-        box.setPadding(new Insets(10));
-        box.getStyleClass().add("work-stat-card");
-        box.setPrefWidth(180);
-        box.setAlignment(Pos.CENTER);
-        return box;
-    }
-
-    private HBox headerRow() {
-        HBox row = new HBox();
-        row.getStyleClass().addAll("monthly-budget-row", "monthly-budget-header-row");
-        row.getChildren().addAll(
-                headerCell("Category"),
-                headerCell("Planned Budget"),
-                headerCell("Actual Spending"),
-                headerCell("Optimized Budget"),
-                headerCell("Status")
-        );
-        return row;
-    }
-
-    private HBox dataRow(BudgetLine line, int index) {
-        HBox row = new HBox();
-        row.getStyleClass().add("monthly-budget-row");
-        if (index % 2 == 1) {
-            row.getStyleClass().add("monthly-budget-row-alt");
+        List<JobOpportunity> filtered = filterJobs();
+        if (filtered.isEmpty()) {
+            contentHolder.getChildren().setAll(new Label("No listings matched your filters."));
+            return;
         }
-        row.getChildren().addAll(
-                dataCell(line.category, true),
-                dataCell(line.planned, false),
-                dataCell(line.actual, false),
-                dataCell(line.optimized, false),
-                statusCell(line.status)
-        );
-        return row;
+        Panel panel = buildListingsPanel(filtered);
+        contentHolder.getChildren().setAll(panel);
     }
 
-    private HBox totalRow() {
-        HBox row = new HBox();
-        row.getStyleClass().addAll("monthly-budget-row", "monthly-budget-total-row");
-        row.getChildren().addAll(
-                totalCell("TOTAL"),
-                totalCell("₹5,300"),
-                totalCell("₹5,800"),
-                totalCell("₹4,950"),
-                new Label()
-        );
-        return row;
+    private List<JobOpportunity> filterJobs() {
+        String term = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
+        String category = categoryFilter.getValue();
+        String location = locationFilter.getValue();
+        boolean onlyVerified = verifiedOnly.isSelected();
+        return allJobs.stream()
+                .filter(job -> term.isBlank() || matchesSearch(job, term))
+                .filter(job -> category == null || category.equals("All categories") || category.equalsIgnoreCase(job.getCategory()))
+                .filter(job -> location == null || location.equals("All locations") || location.equalsIgnoreCase(job.getLocation()))
+                .filter(job -> !onlyVerified || job.getSuitabilityScore() >= 80)
+                .toList();
     }
 
-    private Label headerCell(String text) {
-        Label label = new Label(text);
-        label.getStyleClass().addAll("monthly-budget-cell", "monthly-budget-header");
-        label.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(label, Priority.ALWAYS);
-        return label;
+    private boolean matchesSearch(JobOpportunity job, String term) {
+        return contains(job.getTitle(), term) || contains(job.getCompany(), term) || contains(job.getLocation(), term);
     }
 
-    private Label dataCell(String text, boolean isCategory) {
-        Label label = new Label(text);
-        label.getStyleClass().add("monthly-budget-cell");
-        if (isCategory) {
-            label.getStyleClass().add("monthly-budget-cell-category");
-            label.setAlignment(Pos.CENTER_LEFT);
-        } else {
-            label.setAlignment(Pos.CENTER);
+    private boolean contains(String source, String term) {
+        return source != null && source.toLowerCase().contains(term);
+    }
+
+    private Panel buildListingsPanel(List<JobOpportunity> jobs) {
+        GridPane table = new GridPane();
+        table.setHgap(16);
+        table.setVgap(16);
+        table.setPadding(new Insets(12, 0, 0, 0));
+
+        ColumnConstraints titleCol = new ColumnConstraints();
+        titleCol.setPercentWidth(35);
+        ColumnConstraints companyCol = new ColumnConstraints();
+        companyCol.setPercentWidth(20);
+        ColumnConstraints hoursCol = new ColumnConstraints();
+        hoursCol.setPercentWidth(15);
+        ColumnConstraints payCol = new ColumnConstraints();
+        payCol.setPercentWidth(15);
+        ColumnConstraints actionCol = new ColumnConstraints();
+        actionCol.setPercentWidth(15);
+        table.getColumnConstraints().addAll(titleCol, companyCol, hoursCol, payCol, actionCol);
+
+        addTableHeader(table);
+        int row = 1;
+        for (JobOpportunity job : jobs) {
+            table.add(jobTitleBlock(job), 0, row);
+            table.add(jobCompanyBlock(job), 1, row);
+            table.add(createCell(job.getHours(), "job-table-cell"), 2, row);
+            table.add(createCell(job.getPayRange(), "job-table-cell"), 3, row);
+            table.add(applyAction(job), 4, row);
+            row++;
         }
-        label.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(label, Priority.ALWAYS);
-        return label;
-    }
-
-    private Label statusCell(String text) {
-        Label label = new Label(text);
-        label.getStyleClass().add("monthly-status-pill");
-        label.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(label, Priority.ALWAYS);
-        return label;
-    }
-
-    private Label totalCell(String text) {
-        Label label = new Label(text);
-        label.getStyleClass().add("monthly-budget-total-cell");
-        label.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(label, Priority.ALWAYS);
-        return label;
-    }
-
-    private Panel buildListingsPanel(List<JobOpportunity> jobs, OfflineSyncService offlineSyncService) {
-        VBox list = new VBox(12);
-        jobs.forEach(job -> list.getChildren().add(createJobCard(job, offlineSyncService)));
-        Panel panel = new Panel("Job Listings", list);
+        Panel panel = new Panel("Job Listings", table);
         panel.getStyleClass().add("job-listings-panel");
         return panel;
     }
 
-    private Card createJobCard(JobOpportunity job, OfflineSyncService offlineSyncService) {
-        Label title = new Label(job.getTitle());
-        title.getStyleClass().add("job-title");
-        Label company = new Label(job.getCompany());
-        company.getStyleClass().add("job-company");
-        Label meta = new Label(job.getLocation() + " • " + job.getHours() + " • " + job.getPayRange());
-        meta.getStyleClass().add("job-meta");
-
-        HBox badges = new HBox(6,
-                badge("Verified by Parivaar"),
-                badge(job.getSuitabilityScore() >= 80 ? "High Suitability" : "Medium Suitability"),
-                badge(job.getCategory())
-        );
-        badges.setPadding(new Insets(4, 0, 4, 0));
-
-        VBox details = new VBox(4, title, badges, company, meta);
-        details.setAlignment(Pos.CENTER_LEFT);
-
-        Button apply = new Button("Apply Now");
-        apply.getStyleClass().add("primary-button");
-        apply.setOnAction(e -> {
-            if (offlineSyncService.isOfflineMode()) {
-                offlineSyncService.queueOperation("Apply to " + job.getTitle());
-            }
-        });
-        Button save = new Button("Save");
-        save.getStyleClass().add("outline-button");
-        HBox actions = new HBox(10, apply, save);
-        actions.setAlignment(Pos.CENTER_RIGHT);
-
-        HBox inner = new HBox(details, actions);
-        HBox.setHgrow(details, Priority.ALWAYS);
-        inner.setSpacing(12);
-        inner.setAlignment(Pos.CENTER_LEFT);
-        Card card = new Card();
-        card.getStyleClass().add("job-card");
-        card.setPadding(new Insets(12));
-        card.getChildren().add(inner);
-        return card;
+    private void addTableHeader(GridPane table) {
+        table.add(createHeader("Role & details"), 0, 0);
+        table.add(createHeader("Organisation"), 1, 0);
+        table.add(createHeader("Hours"), 2, 0);
+        table.add(createHeader("Pay"), 3, 0);
+        table.add(createHeader("Action"), 4, 0);
     }
 
-    private Label badge(String text) {
+    private VBox jobTitleBlock(JobOpportunity job) {
+        Label title = new Label(job.getTitle());
+        title.getStyleClass().add("job-title");
+        Label location = new Label(job.getLocation());
+        location.getStyleClass().add("job-meta");
+        Label suitability = new Label("Suitability: " + job.getSuitabilityScore() + "%");
+        suitability.getStyleClass().add("job-meta-tight");
+        VBox box = new VBox(4, title, location, suitability);
+        box.getStyleClass().add("job-table-cell");
+        return box;
+    }
+
+    private VBox jobCompanyBlock(JobOpportunity job) {
+        Label company = new Label(job.getCompany());
+        company.getStyleClass().add("job-company");
+        Label category = new Label(job.getCategory());
+        category.getStyleClass().add("job-meta-tight");
+        VBox box = new VBox(4, company, category);
+        box.getStyleClass().add("job-table-cell");
+        return box;
+    }
+
+    private Label createHeader(String text) {
         Label label = new Label(text);
-        label.getStyleClass().add("job-badge");
+        label.getStyleClass().add("job-table-header");
+        label.setMaxWidth(Double.MAX_VALUE);
         return label;
     }
 
-    private record BudgetLine(String category, String planned, String actual, String optimized, String status) {
+    private Label createCell(String text, String style) {
+        Label label = new Label(text);
+        label.getStyleClass().add(style);
+        label.setMaxWidth(Double.MAX_VALUE);
+        label.setWrapText(true);
+        label.setAlignment(Pos.CENTER_LEFT);
+        return label;
+    }
+
+    private Button applyAction(JobOpportunity job) {
+        Button apply = new Button("Apply Now");
+        apply.getStyleClass().add("primary-button");
+        apply.setDisable(job.getJobUrl() == null || job.getJobUrl().isBlank());
+        apply.setOnAction(e -> openJobLink(job.getJobUrl()));
+        return apply;
+    }
+
+    private void openJobLink(String jobUrl) {
+        if (jobUrl == null || jobUrl.isBlank() || !Desktop.isDesktopSupported()) {
+            return;
+        }
+        try {
+            Desktop.getDesktop().browse(new URI(jobUrl));
+        } catch (IOException | URISyntaxException ex) {
+            System.err.println("Unable to open job link: " + jobUrl);
+        }
     }
 }

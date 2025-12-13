@@ -27,7 +27,7 @@ public class SupabaseClient {
 
     public JsonArray fetchTable(String table, String queryParams, String bearerToken) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(buildUri(table, queryParams)))
+                .uri(URI.create(buildFetchUri(table, queryParams)))
                 .header("apikey", API_KEY)
                 .header("Accept", "application/json")
                 .GET();
@@ -52,7 +52,7 @@ public class SupabaseClient {
         }
     }
 
-    private String buildUri(String table, String queryParams) {
+    private String buildFetchUri(String table, String queryParams) {
         StringBuilder builder = new StringBuilder(REST_ENDPOINT).append(table).append("?select=*");
         if (queryParams != null && !queryParams.isBlank()) {
             if (!queryParams.startsWith("&")) {
@@ -61,6 +61,46 @@ public class SupabaseClient {
             builder.append(queryParams);
         }
         return builder.toString();
+    }
+
+    private String buildWriteUri(String table, String queryParams) {
+        StringBuilder builder = new StringBuilder(REST_ENDPOINT).append(table);
+        if (queryParams != null && !queryParams.isBlank()) {
+            if (!queryParams.startsWith("?")) {
+                builder.append("?");
+            }
+            builder.append(queryParams);
+        }
+        return builder.toString();
+    }
+
+    public JsonArray insertRecord(String table, String queryParams, JsonElement payload, String bearerToken) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(buildWriteUri(table, queryParams)))
+                .header("apikey", API_KEY)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .header("Prefer", "resolution=merge-duplicates,return=representation")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(payload)));
+        if (bearerToken != null && !bearerToken.isBlank()) {
+            builder.header("Authorization", "Bearer " + bearerToken);
+        } else {
+            builder.header("Authorization", "Bearer " + API_KEY);
+        }
+        HttpRequest request = builder.build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                throw new IllegalStateException("Supabase insert failed (" + table + "): " + response.body());
+            }
+            return parseArray(response.body());
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to reach Supabase for table " + table, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Supabase request was interrupted", e);
+        }
     }
 
     private JsonArray parseArray(String body) {

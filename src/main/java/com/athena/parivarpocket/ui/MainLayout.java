@@ -95,17 +95,20 @@ public class MainLayout {
     }
 
     private void setActiveTab(MainTab tab) {
+        if (this.activeTab == tab) {
+            return;
+        }
         this.activeTab = tab;
-        refreshContent();
+        render();
     }
 
     private Node contentForTab(MainTab tab) {
         return switch (tab) {
             case DASHBOARD -> user.getRole() == UserRole.STUDENT
                     ? new StudentDashboardView(user, repository)
-                    : new EducatorDashboardView(repository.getStudentsProgress(), reportService);
+                    : new EducatorDashboardView(repository, reportService);
             case LEARNING -> new LearningModuleView(repository);
-            case WORK -> new WorkModuleView(repository.getJobOpportunities(), offlineSyncService);
+            case WORK -> new WorkModuleView(repository);
             case WALLET -> new WalletModuleView(repository, user, optimizer, offlineSyncService);
             case NOTIFICATIONS -> new NotificationsView(repository.getNotifications(user), offlineSyncService);
         };

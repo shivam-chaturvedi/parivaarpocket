@@ -6,6 +6,7 @@ import com.athena.parivarpocket.model.UserRole;
 import com.athena.parivarpocket.service.AuthService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.concurrent.Task;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
@@ -80,6 +81,13 @@ public class LoginView {
         HBox roleBox = new HBox(8, studentBtn, educatorBtn);
         roleBox.setAlignment(Pos.CENTER_LEFT);
 
+        Label roleLabel = new Label("Role");
+        roleLabel.setStyle("-fx-text-fill: #000000; -fx-font-weight: 600; -fx-font-size: 14px;");
+        Label emailLabel = new Label("Email");
+        emailLabel.setStyle("-fx-text-fill: #000000; -fx-font-weight: 600; -fx-font-size: 14px;");
+        Label passwordLabel = new Label("Password");
+        passwordLabel.setStyle("-fx-text-fill: #000000; -fx-font-weight: 600; -fx-font-size: 14px;");
+
         Label errorLabel = new Label();
         errorLabel.getStyleClass().add("danger");
         errorLabel.setVisible(false);
@@ -95,38 +103,66 @@ public class LoginView {
             submitButton.setText(registering ? "Create account" : "Sign in");
             switchButton.setText(registering ? "Back to sign in" : "New here? Create account");
             errorLabel.setVisible(false);
+            updateRoleSelectionVisibility(roleLabel, roleBox);
         });
 
         submitButton.setText("Sign in");
         switchButton.setText("New here? Create account");
 
+        ProgressIndicator loader = new ProgressIndicator();
+        loader.setPrefSize(32, 32);
+        loader.setVisible(false);
+        loader.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        loader.getStyleClass().add("login-loader");
+        HBox loaderRow = new HBox(loader);
+        loaderRow.setAlignment(Pos.CENTER);
+        loaderRow.setPadding(new Insets(4, 0, 0, 0));
+        loaderRow.setVisible(false);
+        loaderRow.setManaged(false);
+        Consumer<Boolean> toggleLoading = isLoading -> {
+            submitButton.setDisable(isLoading);
+            switchButton.setDisable(isLoading);
+            studentBtn.setDisable(isLoading);
+            educatorBtn.setDisable(isLoading);
+            emailField.setDisable(isLoading);
+            passwordField.setDisable(isLoading);
+            loaderRow.setVisible(isLoading);
+            loaderRow.setManaged(isLoading);
+        };
+
         submitButton.setOnAction(e -> {
             errorLabel.setVisible(false);
-            try {
-                UserRole role = (UserRole) roleGroup.getSelectedToggle().getUserData();
-                String email = emailField.getText();
-                String password = passwordField.getText();
-                User user = registering
-                        ? authService.register(email, password, role)
-                        : authService.login(email, password, role);
-                onLogin.accept(user);
-            } catch (Exception ex) {
-                String message = ex.getMessage();
+            toggleLoading.accept(true);
+            String email = emailField.getText();
+            String password = passwordField.getText();
+            boolean targetRegistering = registering;
+            Task<User> authTask = new Task<>() {
+                @Override
+                protected User call() {
+                    if (targetRegistering) {
+                        return authService.register(email, password, (UserRole) roleGroup.getSelectedToggle().getUserData());
+                    }
+                    return authService.login(email, password);
+                }
+            };
+            authTask.setOnSucceeded(event -> {
+                toggleLoading.accept(false);
+                onLogin.accept(authTask.getValue());
+            });
+            authTask.setOnFailed(event -> {
+                toggleLoading.accept(false);
+                Throwable cause = authTask.getException();
+                String message = cause == null ? "Authentication failed." : cause.getMessage();
                 errorLabel.setText(message);
                 errorLabel.setVisible(true);
                 showAlert(message);
-            }
+            });
+            new Thread(authTask).start();
         });
 
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
-        Label roleLabel = new Label("Role");
-        roleLabel.setStyle("-fx-text-fill: #000000; -fx-font-weight: 600; -fx-font-size: 14px;");
-        Label emailLabel = new Label("Email");
-        emailLabel.setStyle("-fx-text-fill: #000000; -fx-font-weight: 600; -fx-font-size: 14px;");
-        Label passwordLabel = new Label("Password");
-        passwordLabel.setStyle("-fx-text-fill: #000000; -fx-font-weight: 600; -fx-font-size: 14px;");
 
         grid.add(roleLabel, 0, 0);
         grid.add(roleBox, 1, 0);
@@ -146,11 +182,13 @@ public class LoginView {
                 fieldsBox,
                 submitButton,
                 switchButton,
-                errorLabel);
+                errorLabel,
+                loaderRow);
         formBox.setPadding(new Insets(40, 40, 40, 40));
         formBox.setMaxWidth(460);
         formBox.setAlignment(Pos.CENTER);
 
+        updateRoleSelectionVisibility(roleLabel, roleBox);
         Panel panel = new Panel(null, formBox);
         panel.setPrefWidth(500);
         panel.setMinWidth(500);
@@ -165,6 +203,14 @@ public class LoginView {
         Alert alert = new Alert(Alert.AlertType.ERROR, message, ButtonType.OK);
         alert.setHeaderText("Check your inputs");
         alert.showAndWait();
+    }
+
+    private void updateRoleSelectionVisibility(Label roleLabel, HBox roleBox) {
+        boolean visible = registering;
+        roleLabel.setVisible(visible);
+        roleLabel.setManaged(visible);
+        roleBox.setVisible(visible);
+        roleBox.setManaged(visible);
     }
 
     private Node buildIllustrationPanel() {

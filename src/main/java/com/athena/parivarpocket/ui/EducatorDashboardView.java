@@ -1,6 +1,7 @@
 package com.athena.parivarpocket.ui;
 
 import com.athena.parivarpocket.model.StudentProgress;
+import com.athena.parivarpocket.service.DataRepository;
 import com.athena.parivarpocket.service.ReportService;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
@@ -8,6 +9,7 @@ import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -16,10 +18,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class EducatorDashboardView extends VBox {
+    private final DataRepository repository;
     private final List<StudentProgress> allStudents;
     private final FilteredList<StudentProgress> filteredStudents;
 
-    public EducatorDashboardView(List<StudentProgress> students, ReportService reportService) {
+    public EducatorDashboardView(DataRepository repository, ReportService reportService) {
+        this.repository = repository;
+        List<StudentProgress> students = repository.getStudentsProgress();
         this.allStudents = new ArrayList<>(students);
         this.filteredStudents = new FilteredList<>(FXCollections.observableArrayList(allStudents), p -> true);
 
@@ -27,6 +32,7 @@ public class EducatorDashboardView extends VBox {
         setFillWidth(true);
         getChildren().add(buildMonitoringPanel(reportService));
         getChildren().add(buildPerformancePanel(reportService));
+        getChildren().add(buildCourseAuthoringPanel());
     }
 
     private Panel buildMonitoringPanel(ReportService reportService) {
@@ -263,6 +269,134 @@ public class EducatorDashboardView extends VBox {
             reportService.exportStudentReport(progress);
         }
         showAlert(Alert.AlertType.INFORMATION, "Exported " + allStudents.size() + " reports.");
+    }
+
+    private Panel buildCourseAuthoringPanel() {
+        TextField lessonTitle = new TextField();
+        lessonTitle.setPromptText("Lesson title");
+        TextArea description = new TextArea();
+        description.setPromptText("Lesson description");
+        description.setWrapText(true);
+        description.setPrefRowCount(3);
+
+        ChoiceBox<String> difficulty = new ChoiceBox<>(FXCollections.observableArrayList("Beginner", "Intermediate", "Advanced"));
+        difficulty.getSelectionModel().selectFirst();
+        TextField courseUrl = new TextField();
+        courseUrl.setPromptText("Course URL");
+
+        TextField quizTitle = new TextField();
+        quizTitle.setPromptText("Quiz title");
+        Spinner<Integer> passingSpinner = new Spinner<>(0, 100, 3);
+        passingSpinner.setEditable(true);
+        Spinner<Integer> totalSpinner = new Spinner<>(1, 100, 5);
+        totalSpinner.setEditable(true);
+
+        TextField questionField = new TextField();
+        questionField.setPromptText("Question text");
+        TextArea optionsArea = new TextArea();
+        optionsArea.setPromptText("Options (one per line)");
+        optionsArea.setPrefRowCount(4);
+        TextField correctIndex = new TextField();
+        correctIndex.setPromptText("Correct option index (0-based)");
+        Spinner<Integer> pointsSpinner = new Spinner<>(1, 10, 1);
+        pointsSpinner.setEditable(true);
+
+        Button createButton = new Button("Create lesson + quiz");
+        createButton.getStyleClass().add("primary-button");
+        createButton.setOnAction(e -> {
+            String title = lessonTitle.getText().trim();
+            String diff = difficulty.getValue();
+            String desc = description.getText().trim();
+            String url = courseUrl.getText().trim();
+            String qTitle = quizTitle.getText().trim();
+            String question = questionField.getText().trim();
+            List<String> options = parseOptions(optionsArea);
+            int passing = Math.max(0, passingSpinner.getValue());
+            int total = Math.max(1, totalSpinner.getValue());
+            int points = Math.max(1, pointsSpinner.getValue());
+            int correct;
+            try {
+                correct = Integer.parseInt(correctIndex.getText().trim());
+            } catch (NumberFormatException ex) {
+                showAlert(Alert.AlertType.WARNING, "Correct option must be a number.");
+                return;
+            }
+            if (options.isEmpty()) {
+                showAlert(Alert.AlertType.WARNING, "Add at least one option.");
+                return;
+            }
+            if (correct < 0 || correct >= options.size()) {
+                showAlert(Alert.AlertType.WARNING, "Correct option index must match one of the provided options.");
+                return;
+            }
+            boolean success = repository.createLessonWithQuiz(title, diff, desc, url, qTitle, passing, total, question, options, correct, points);
+            if (success) {
+                showAlert(Alert.AlertType.INFORMATION, "Lesson and quiz created successfully.");
+                lessonTitle.clear();
+                description.clear();
+                courseUrl.clear();
+                quizTitle.clear();
+                questionField.clear();
+                optionsArea.clear();
+                correctIndex.clear();
+            } else {
+                showAlert(Alert.AlertType.ERROR, "Unable to create lesson. Check you are signed in.");
+            }
+        });
+
+        GridPane grid = new GridPane();
+        grid.setHgap(12);
+        grid.setVgap(8);
+        grid.add(new Label("Lesson title"), 0, 0);
+        grid.add(lessonTitle, 1, 0);
+        grid.add(new Label("Difficulty"), 0, 1);
+        grid.add(difficulty, 1, 1);
+        grid.add(new Label("Description"), 0, 2);
+        grid.add(description, 1, 2);
+        grid.add(new Label("Course URL"), 0, 3);
+        grid.add(courseUrl, 1, 3);
+        grid.add(new Label("Quiz title"), 0, 4);
+        grid.add(quizTitle, 1, 4);
+        grid.add(new Label("Passing marks"), 0, 5);
+        grid.add(passingSpinner, 1, 5);
+        grid.add(new Label("Total marks"), 0, 6);
+        grid.add(totalSpinner, 1, 6);
+        grid.add(new Label("Question"), 0, 7);
+        grid.add(questionField, 1, 7);
+        grid.add(new Label("Options"), 0, 8);
+        grid.add(optionsArea, 1, 8);
+        grid.add(new Label("Correct option index"), 0, 9);
+        grid.add(correctIndex, 1, 9);
+        grid.add(new Label("Points (per question)"), 0, 10);
+        grid.add(pointsSpinner, 1, 10);
+
+        GridPane.setHgrow(lessonTitle, Priority.ALWAYS);
+        GridPane.setHgrow(description, Priority.ALWAYS);
+        GridPane.setHgrow(courseUrl, Priority.ALWAYS);
+        GridPane.setHgrow(quizTitle, Priority.ALWAYS);
+        GridPane.setHgrow(questionField, Priority.ALWAYS);
+        GridPane.setHgrow(optionsArea, Priority.ALWAYS);
+        GridPane.setHgrow(correctIndex, Priority.ALWAYS);
+
+        VBox wrapper = new VBox(10, grid, createButton);
+        wrapper.setPadding(new Insets(12));
+        Panel panel = new Panel("Add or update learning content", wrapper);
+        panel.getStyleClass().add("course-authoring-panel");
+        return panel;
+    }
+
+    private List<String> parseOptions(TextArea area) {
+        if (area == null || area.getText().isBlank()) {
+            return List.of();
+        }
+        List<String> options = new ArrayList<>();
+        for (String line : area.getText().split("\\R")) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                options.add(trimmed);
+            }
+        }
+        return options;
     }
 
     private VBox createMetricCard(String value, String label) {

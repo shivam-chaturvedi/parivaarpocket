@@ -12,10 +12,11 @@ public class JobOpportunity {
     private final List<String> requiredSkills;
     private final String safetyNotes;
     private final String contact;
+    private final String jobUrl;
     private final int suitabilityScore;
 
     public JobOpportunity(String title, String company, String location, String category, String hours, String payRange,
-                          List<String> requiredSkills, String safetyNotes, String contact, int suitabilityScore) {
+                          List<String> requiredSkills, String safetyNotes, String contact, String jobUrl, int suitabilityScore) {
         this.title = title;
         this.company = company;
         this.location = location;
@@ -25,6 +26,7 @@ public class JobOpportunity {
         this.requiredSkills = requiredSkills;
         this.safetyNotes = safetyNotes;
         this.contact = contact;
+        this.jobUrl = jobUrl;
         this.suitabilityScore = suitabilityScore;
     }
 
@@ -62,6 +64,10 @@ public class JobOpportunity {
 
     public String getContact() {
         return contact;
+    }
+
+    public String getJobUrl() {
+        return jobUrl;
     }
 
     public int getSuitabilityScore() {

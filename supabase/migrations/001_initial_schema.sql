@@ -105,34 +105,3 @@ alter table public.student_progress enable row level security;
 drop policy if exists "Student progress is readable by the app" on public.student_progress;
 create policy "Student progress is readable by the app" on public.student_progress
     for select using (auth.role() in ('anon', 'authenticated'));
-
--- Sample data so the UI shows something immediately
-insert into public.lessons (title, difficulty, description, progress_percent, quizzes_completed, quizzes_total)
-values
-  ('Budgeting Basics', 'Beginner', 'Understand income, expenses, and how to build a safe budget.', 70, 3, 5),
-  ('Smart Saving', 'Intermediate', 'Set savings goals and track them with alerts and reminders.', 40, 2, 4);
-
-insert into public.quiz_results (title, score, difficulty, coins_awarded)
-values
-  ('Budget Planner Quiz', 92, 'Intermediate', 120),
-  ('Job Readiness', 84, 'Advanced', 140);
-
-insert into public.job_opportunities (title, company, location, category, hours, pay_range, required_skills, safety_notes, contact, suitability_score)
-values
-  ('Mathematics Tutor', 'Learn & Grow Academy', 'Kolkata', 'Tutoring', 'Part-time (10-15 hrs/week)', '₹3,000 - ₹5,000/month',
-            array['Grade 8-10 maths','Communication'], 'Work only with school references', 'call: 90000-00001', 86);
-
-insert into public.notifications (title, description, severity, notify_date)
-values
-  ('Wallet Alert', 'Spending on transport exceeded the weekly budget.', 'warning', current_date - 1),
-  ('Quiz Reminder', 'Practice "Savings Safety" quiz to unlock ParivaarCoins.', 'info', current_date - 2);
-
-insert into public.student_progress (student_name, modules_completed, total_modules, quizzes_taken, average_score, wallet_health_score, parivaar_points, employment_applications, job_saves, wallet_savings, alerts)
-values
-  ('Rajesh Kumar', 8, 12, 15, 82, 78, 1250, 3, 5, 3200, 1);
-
-insert into public.wallet_entries (owner_email, entry_type, category, amount, note, entry_date)
-values
-  ('student@parivaar.org', 'INCOME', 'Scholarship', 4500, 'Monthly stipend', current_date - 12),
-  ('student@parivaar.org', 'EXPENSE', 'Food', 1800, 'Groceries and snacks', current_date - 3),
-  ('student@parivaar.org', 'SAVINGS', 'Emergency', 3200, 'Emergency fund', current_date - 7);

@@ -1,110 +1,194 @@
 package com.athena.parivarpocket.ui;
 
+import com.athena.parivarpocket.model.Lesson;
+import com.athena.parivarpocket.model.QuizDefinition;
+import com.athena.parivarpocket.model.QuizQuestion;
+import com.athena.parivarpocket.model.QuizAttempt;
+import com.athena.parivarpocket.model.User;
 import com.athena.parivarpocket.service.DataRepository;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ProgressBar;
+import javafx.scene.Node;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 
+import java.awt.Desktop;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class LearningModuleView extends VBox {
+    private final DataRepository repository;
+
     public LearningModuleView(DataRepository repository) {
+        this.repository = repository;
         setSpacing(18);
         setPadding(new Insets(0, 0, 8, 0));
-        List<LearningModule> modules = List.of(
-                new LearningModule("Budgeting Basics", 100, 100, false),
-                new LearningModule("Smart Saving Strategies", 75, 150, false),
-                new LearningModule("Understanding Income", 50, 120, false),
-                new LearningModule("Expense Management", 0, 180, false),
-                new LearningModule("Investment Fundamentals", 0, 200, true),
-                new LearningModule("Financial Planning", 0, 250, true)
-        );
-        getChildren().add(buildLibraryPanel(modules));
-        getChildren().add(buildProgressPanel(modules));
+        refreshContent();
     }
 
-    private Panel buildLibraryPanel(List<LearningModule> modules) {
+    private void refreshContent() {
+        List<Lesson> lessons = repository.getLessons();
+        if (lessons.isEmpty()) {
+            Label placeholder = new Label("Learning content is syncing. Please wait while we load lessons from Supabase.");
+            placeholder.setWrapText(true);
+            placeholder.setStyle("-fx-text-fill: #5b5b5b;");
+            placeholder.setPadding(new Insets(30));
+            Panel panel = new Panel("Learning Library", placeholder);
+            panel.getStyleClass().add("learning-panel");
+            getChildren().setAll(panel, new Panel("Learning Snapshot", new Label("Progress will appear here once lessons load.")));
+            return;
+        }
+        Panel libraryPanel = buildLibraryPanel(lessons);
+        Panel progressPanel = buildProgressPanel(lessons);
+        getChildren().setAll(libraryPanel, progressPanel);
+    }
+
+    private Panel buildLibraryPanel(List<Lesson> lessons) {
         GridPane grid = new GridPane();
-        grid.setHgap(14);
-        grid.setVgap(14);
+        grid.setHgap(18);
+        grid.setVgap(18);
         grid.setPadding(new Insets(8, 0, 0, 0));
         ColumnConstraints column = new ColumnConstraints();
-        column.setPercentWidth(33.33);
-        column.setHalignment(HPos.LEFT);
+        column.setPercentWidth(50);
         column.setHgrow(Priority.ALWAYS);
-        grid.getColumnConstraints().addAll(column, column, column);
+        column.setHalignment(HPos.LEFT);
+        grid.getColumnConstraints().addAll(column, column);
+
         int columnIndex = 0;
         int rowIndex = 0;
-        for (LearningModule module : modules) {
-            VBox card = createModuleCard(module);
+        for (Lesson lesson : lessons) {
+            VBox card = createLessonCard(lesson);
             grid.add(card, columnIndex, rowIndex);
+            GridPane.setFillWidth(card, true);
             columnIndex++;
-            if (columnIndex >= 3) {
+            if (columnIndex >= 2) {
                 columnIndex = 0;
                 rowIndex++;
             }
         }
-        Panel panel = new Panel("Financial Learning Library", grid);
+        Panel panel = new Panel("Learning Library", grid);
         panel.getStyleClass().add("learning-panel");
         return panel;
     }
 
-    private VBox createModuleCard(LearningModule module) {
-        Label icon = new Label("\uD83D\uDCD6");
-        icon.getStyleClass().add("learning-card-icon");
-        Label title = new Label(module.title);
+    private VBox createLessonCard(Lesson lesson) {
+        boolean completed = repository.isLessonCompleted(lesson.getId());
+        Label title = new Label(lesson.getTitle());
         title.getStyleClass().add("learning-card-title");
-        HBox titleRow = new HBox(6, icon, title);
+
+        Label difficulty = new Label(lesson.getDifficulty());
+        difficulty.getStyleClass().add("learning-card-difficulty");
+        HBox titleRow = new HBox(10, title, difficulty);
         titleRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(title, Priority.ALWAYS);
 
-        ProgressBar bar = new ProgressBar(module.progress / 100.0);
-        bar.setPrefHeight(10);
-        bar.setStyle("-fx-accent: #111111;");
+        Label description = new Label(lesson.getDescription());
+        description.setWrapText(true);
+        description.setMaxWidth(Double.MAX_VALUE);
+        description.getStyleClass().add("learning-card-description");
 
-        Label progress = new Label(module.progress + "% Complete");
-        progress.getStyleClass().add("learning-card-progress");
+        ProgressBar progressBar = null;
+        Label progressMeta = null;
+        // keep disabled for now as we don't want to show partial progress
+        if (lesson.getQuizzesTotal() > 0 && false) {
+            double ratio = Math.min(1, (double) lesson.getQuizzesCompleted() / lesson.getQuizzesTotal());
+            progressBar = new ProgressBar(ratio);
+            progressBar.setPrefHeight(8);
+            progressBar.setStyle("-fx-accent: #111111;");
+            progressMeta = new Label(lesson.getQuizzesCompleted() + " / " + lesson.getQuizzesTotal() + " quizzes completed");
+            progressMeta.getStyleClass().add("learning-card-progress");
+        }
 
-        HBox footer = new HBox(14);
-        footer.setAlignment(Pos.CENTER_LEFT);
-        Label coins = new Label("₹" + module.coins + " Coins");
-        coins.getStyleClass().add("learning-card-coins");
-        Button action = new Button(module.locked ? "Locked" : module.progress >= 100 ? "Continue" : module.progress == 0 ? "Start" : "Continue");
-        action.getStyleClass().add(module.locked ? "outline-button" : "primary-button");
-        action.setDisable(module.locked);
-        footer.getChildren().addAll(coins, action);
+        Label statusLabel = new Label(completed ? "Module Completed" : "Not completed yet");
+        statusLabel.getStyleClass().add(completed ? "learning-status-complete" : "learning-status-pending");
 
-        VBox card = new VBox(12, titleRow, bar, progress, footer);
+        Button viewCourse = new Button("View Course");
+        viewCourse.getStyleClass().add("primary-button");
+        viewCourse.setDisable(lesson.getCourseUrl() == null || lesson.getCourseUrl().isBlank());
+        viewCourse.setMaxWidth(Double.MAX_VALUE);
+        viewCourse.setOnAction(event -> openCourseLink(lesson.getCourseUrl()));
+
+        VBox quizSection = buildQuizSection(lesson, completed);
+        List<Node> cardChildren = new ArrayList<>(List.of(titleRow, description));
+        if (progressBar != null && progressMeta != null) {
+            cardChildren.add(progressBar);
+            cardChildren.add(progressMeta);
+        }
+        cardChildren.add(statusLabel);
+        cardChildren.add(quizSection);
+        cardChildren.add(viewCourse);
+        VBox card = new VBox(10, cardChildren.toArray(new Node[0]));
         card.setPadding(new Insets(18));
         card.getStyleClass().add("learning-card");
-        card.setPrefHeight(160);
-        card.setMinHeight(160);
+        card.setPrefHeight(260);
+        card.setMinHeight(260);
         card.setMaxWidth(Double.MAX_VALUE);
-        if (module.locked) {
-            card.getStyleClass().add("learning-card-locked");
+        if (completed) {
+            card.getStyleClass().add("learning-card-complete");
         }
         return card;
     }
 
-    private Panel buildProgressPanel(List<LearningModule> modules) {
-        int coursesStarted = (int) modules.stream().filter(m -> m.progress > 0).count();
-        int coursesCompleted = (int) modules.stream().filter(m -> m.progress >= 100).count();
-        int totalCoins = modules.stream().mapToInt(m -> m.coins).sum();
+    private VBox buildQuizSection(Lesson lesson, boolean completed) {
+        List<QuizDefinition> quizzes = repository.getQuizzesForLesson(lesson.getId());
+        if (quizzes.isEmpty()) {
+            Label hint = new Label("No quizzes attached yet. Learn the course to unlock assessments.");
+            hint.getStyleClass().add("learning-quiet");
+            return new VBox(hint);
+        }
+        VBox quizBox = new VBox(6);
+        Label header = new Label("Quizzes");
+        header.getStyleClass().add("learning-quiz-header");
+        quizBox.getChildren().add(header);
+        for (QuizDefinition quiz : quizzes) {
+            HBox row = new HBox(16);
+            Label quizTitle = new Label(quiz.getTitle() + " • " + quiz.getDifficulty());
+            quizTitle.getStyleClass().add("learning-quiz-title");
+            Button takeQuiz = new Button("Take Quiz");
+            takeQuiz.getStyleClass().add("outline-button");
+            takeQuiz.setDisable(completed);
+            takeQuiz.setOnAction(event -> showQuizDialog(lesson, quiz));
+            row.getChildren().addAll(quizTitle, takeQuiz);
+            row.setAlignment(Pos.CENTER_LEFT);
+            HBox.setHgrow(quizTitle, Priority.ALWAYS);
+            quizBox.getChildren().add(row);
+        }
+        return quizBox;
+    }
 
-        HBox stats = new HBox(12,
-                createStatCard("Courses Started", String.valueOf(coursesStarted)),
-                createStatCard("Courses Completed", String.valueOf(coursesCompleted)),
-                createStatCard("Total Coins Earned", String.valueOf(totalCoins))
+    private Panel buildProgressPanel(List<Lesson> lessons) {
+        int inProgress = (int) lessons.stream()
+                .filter(l -> l.getProgressPercent() > 0 && l.getProgressPercent() < 100)
+                .count();
+        int completed = (int) lessons.stream()
+                .filter(l -> repository.isLessonCompleted(l.getId()))
+                .count();
+        double average = lessons.isEmpty() ? 0 : lessons.stream()
+                .mapToInt(Lesson::getProgressPercent)
+                .average()
+                .orElse(0);
+
+        HBox stats = new HBox(14,
+                createStatCard("In-progress", String.valueOf(inProgress)),
+                createStatCard("Completed", String.valueOf(completed)),
+                createStatCard("Avg completion", Math.round(average) + "%")
         );
         stats.setAlignment(Pos.CENTER);
-        Panel panel = new Panel("Your Progress", stats);
+        Panel panel = new Panel("Learning Snapshot", stats);
         panel.getStyleClass().add("learning-progress-panel");
         return panel;
     }
@@ -120,6 +204,148 @@ public class LearningModuleView extends VBox {
         return box;
     }
 
-    private record LearningModule(String title, int progress, int coins, boolean locked) {
+    private void openCourseLink(String courseUrl) {
+        if (courseUrl == null || courseUrl.isBlank() || !Desktop.isDesktopSupported()) {
+            return;
+        }
+        try {
+            Desktop.getDesktop().browse(new URI(courseUrl));
+        } catch (IOException | URISyntaxException e) {
+            System.err.println("Unable to open course link: " + courseUrl);
+        }
+    }
+
+    private void showQuizDialog(Lesson lesson, QuizDefinition quiz) {
+        User user = repository.getCurrentUser();
+        if (user == null) {
+            showFeedback("Quiz unavailable", "Please sign in to take quizzes.");
+            return;
+        }
+        List<QuizQuestion> questions = repository.getQuestionsForQuiz(quiz.getId());
+        if (questions.isEmpty()) {
+            showFeedback("Quiz is empty", "We could not find questions for this quiz yet.");
+            return;
+        }
+
+        Stage dialog = new Stage();
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.setTitle("Quiz • " + quiz.getTitle());
+
+        Label questionLabel = new Label();
+        questionLabel.getStyleClass().add("quiz-question-title");
+        questionLabel.setWrapText(true);
+        questionLabel.setMaxWidth(520);
+
+        VBox optionsBox = new VBox(8);
+        optionsBox.setPrefWidth(520);
+
+        Button cancelButton = new Button("Cancel");
+        cancelButton.getStyleClass().add("outline-button");
+        cancelButton.setPrefSize(120, 40);
+        cancelButton.setOnAction(e -> dialog.close());
+
+        Button nextButton = new Button("Next");
+        nextButton.getStyleClass().add("primary-button");
+        nextButton.setPrefSize(140, 40);
+        nextButton.setDisable(true);
+
+        HBox actions = new HBox(10, cancelButton, nextButton);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        actions.getStyleClass().add("quiz-actions");
+
+        VBox body = new VBox(18, questionLabel, optionsBox, actions);
+        body.setPadding(new Insets(20));
+        body.getStyleClass().add("quiz-dialog-body");
+
+        Scene scene = new Scene(body, 560, 320);
+        dialog.setScene(scene);
+
+        List<Integer> responses = new ArrayList<>(Collections.nCopies(questions.size(), -1));
+        final int[] currentIndex = {0};
+        ObjectProperty<ToggleGroup> activeGroup = new SimpleObjectProperty<>();
+
+        Runnable updateQuestion = () -> {
+            QuizQuestion question = questions.get(currentIndex[0]);
+            questionLabel.setText((currentIndex[0] + 1) + ". " + question.getQuestion());
+            optionsBox.getChildren().clear();
+            ToggleGroup toggleGroup = new ToggleGroup();
+            for (int i = 0; i < question.getOptions().size(); i++) {
+                RadioButton option = new RadioButton(question.getOptions().get(i));
+                option.getStyleClass().add("quiz-option");
+                option.setWrapText(true);
+                option.setMaxWidth(Double.MAX_VALUE);
+                option.setToggleGroup(toggleGroup);
+                option.setUserData(i);
+                optionsBox.getChildren().add(option);
+            }
+            toggleGroup.selectedToggleProperty().addListener((obs, old, value) -> nextButton.setDisable(value == null));
+            activeGroup.set(toggleGroup);
+            nextButton.setText(currentIndex[0] == questions.size() - 1 ? "Submit" : "Next");
+            nextButton.setDisable(toggleGroup.getSelectedToggle() == null);
+        };
+
+        updateQuestion.run();
+
+        nextButton.setOnAction(e -> {
+            ToggleGroup group = activeGroup.get();
+            if (group == null || group.getSelectedToggle() == null) {
+                return;
+            }
+            int selected = (Integer) group.getSelectedToggle().getUserData();
+            responses.set(currentIndex[0], selected);
+            if (currentIndex[0] < questions.size() - 1) {
+                currentIndex[0]++;
+                updateQuestion.run();
+                return;
+            }
+            dialog.close();
+            processQuizCompletion(lesson, quiz, questions, user, responses);
+        });
+
+        dialog.showAndWait();
+    }
+
+    private void processQuizCompletion(Lesson lesson,
+                                       QuizDefinition quiz,
+                                       List<QuizQuestion> questions,
+                                       User user,
+                                       List<Integer> responses) {
+        int score = 0;
+        int maxScore = 0;
+        for (int i = 0; i < questions.size(); i++) {
+            QuizQuestion question = questions.get(i);
+            int points = question.getPoints();
+            maxScore += points;
+            Integer selected = responses.get(i);
+            if (selected != null && selected == question.getCorrectOption()) {
+                score += points;
+            }
+        }
+        int totalMarks = Math.max(maxScore, 1);
+        int passingTarget = Math.min(Math.max(quiz.getPassingMarks(), 0), totalMarks);
+        boolean passed = score >= passingTarget;
+        QuizAttempt attempt = repository.recordQuizAttempt(
+                user,
+                quiz,
+                score,
+                totalMarks,
+                passed,
+                new ArrayList<>(responses));
+        if (passed && attempt != null) {
+            repository.saveLessonCompletion(user, lesson, attempt);
+        }
+        String message = String.format("You scored %d / %d. %s",
+                score,
+                totalMarks,
+                passed ? "Module marked complete." : "Review the course material and try again.");
+        showFeedback(passed ? "Quiz passed" : "Quiz submitted", message);
+        refreshContent();
+    }
+
+    private void showFeedback(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setHeaderText(title);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }

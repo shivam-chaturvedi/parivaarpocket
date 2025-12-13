@@ -23,8 +23,9 @@ public class AuthService {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
     private final Gson gson = new Gson();
+    private final ProfileService profileService = new ProfileService();
 
-    public User login(String email, String password, UserRole requestedRole) {
+    public User login(String email, String password) {
         validateEmail(email);
         validatePassword(password);
 
@@ -40,7 +41,8 @@ public class AuthService {
 
         String requestPayload = gson.toJson(loginBody);
         JsonObject payload = executeRequest(request, requestPayload);
-        return createUserFromResponse(payload, requestedRole);
+        UserRole profileRole = profileService.fetchRoleByEmail(email);
+        return createUserFromResponse(payload, profileRole);
     }
 
     public User register(String email, String password, UserRole role) {
@@ -59,6 +61,7 @@ public class AuthService {
                 .build();
 
         JsonObject payload = executeRequest(request, gson.toJson(body));
+        profileService.upsertProfile(email, role);
         return createUserFromResponse(payload, role);
     }
 
@@ -93,7 +96,7 @@ public class AuthService {
         }
     }
 
-    private User createUserFromResponse(JsonObject payload, UserRole requestedRole) {
+    private User createUserFromResponse(JsonObject payload, UserRole overrideRole) {
         if (payload == null) {
             throw new IllegalStateException("Unexpected response from Supabase");
         }
@@ -104,18 +107,23 @@ public class AuthService {
         String email = valueOrThrow(userJson, "email", "Supabase did not return an email");
         String metadataRole = extractMetadataValue(userJson, "role");
         UserRole storedRole = UserRole.fromMetadata(metadataRole);
-        if (storedRole == null) {
-            storedRole = requestedRole;
-        }
-        if (storedRole != requestedRole) {
-            throw new IllegalArgumentException("Role mismatch. Please pick the correct profile for this account.");
-        }
+        UserRole resolvedRole = resolveRole(overrideRole, storedRole);
         String name = resolveDisplayName(userJson, email);
         String userId = valueOrThrow(userJson, "id", "Supabase did not return an id");
         String accessToken = payload.has("access_token") && !payload.get("access_token").isJsonNull()
                 ? payload.get("access_token").getAsString()
                 : null;
-        return new User(userId, email, capitalise(name), storedRole, accessToken);
+        return new User(userId, email, capitalise(name), resolvedRole, accessToken);
+    }
+
+    private UserRole resolveRole(UserRole overrideRole, UserRole metadataRole) {
+        if (overrideRole != null) {
+            if (metadataRole != null && metadataRole != overrideRole) {
+                System.out.println("[AuthService] Profile role differs from stored metadata, using profile value.");
+            }
+            return overrideRole;
+        }
+        return metadataRole != null ? metadataRole : UserRole.STUDENT;
     }
 
     private JsonObject buildRegistrationBody(String email, String password, UserRole role) {
