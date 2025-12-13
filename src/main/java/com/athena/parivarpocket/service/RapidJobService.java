@@ -52,8 +52,10 @@ public class RapidJobService {
             String location = getAsString(jobJson, "location", "West Bengal, India");
             String company = getAsString(jobJson, "company_name", "Hiring partner");
             String relativeTime = getAsString(jobJson, "formatted_relative_time", "");
-            String jobLink = getAsString(jobJson, "link", "");
-            String jobUrl = jobLink.startsWith("http") ? jobLink : "https://indeed.com" + jobLink;
+            String jobLink = getAsString(jobJson, "id", "");
+
+            String jobUrl = jobLink.startsWith("http") ? jobLink : "https://in.indeed.com/viewjob?jk=" + jobLink;
+ ;
             JobOpportunity job = new JobOpportunity(
                     title,
                     company,
