@@ -28,6 +28,7 @@ public class DataRepository {
     private volatile List<NotificationItem> notificationsCache;
     private volatile List<StudentProgress> studentProgressCache;
     private volatile List<WalletEntry> walletCache;
+    private volatile List<StudentProfile> profileCache;
     private volatile Map<String, BudgetGoal> budgetGoalCache = Map.of();
     private User currentUser;
 
@@ -45,6 +46,7 @@ public class DataRepository {
         jobCache = mapTable("job_opportunities", null, this::toJobOpportunity);
         notificationsCache = mapTable("notifications", null, this::toNotification);
         studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
+        profileCache = mapTable("profiles", null, this::toStudentProfile);
         walletCache = fetchWalletFromSupabase(user);
         lessonCompletionCache = user != null ? fetchLessonCompletions(user) : List.of();
         quizAttemptCache = user != null ? fetchQuizAttempts(user) : List.of();
@@ -85,6 +87,13 @@ public class DataRepository {
             return jobCache;
         }
         return mapTable("job_opportunities", null, this::toJobOpportunity);
+    }
+
+    public List<StudentProfile> getStudentProfiles() {
+        if (profileCache != null) {
+            return profileCache;
+        }
+        return mapTable("profiles", null, this::toStudentProfile);
     }
 
     public List<QuizDefinition> getQuizDefinitions() {
@@ -250,9 +259,6 @@ public class DataRepository {
                 : fetchWalletFromSupabase(user);
         if (entries.isEmpty()) {
             entries = new ArrayList<>(storeService.loadWalletEntries(user));
-            if (entries.isEmpty()) {
-                entries.addAll(defaultWallet());
-            }
         } else {
             storeService.saveWalletEntries(user, entries);
         }
@@ -261,8 +267,16 @@ public class DataRepository {
     }
 
     public void addWalletEntry(User user, WalletEntry entry) {
+        if (user == null || entry == null) {
+            return;
+        }
+        // Persist to Supabase
+        insertWalletEntry(user, entry);
+
+        // Update local memory cache
         List<WalletEntry> entries = new ArrayList<>(loadWallet(user));
-        entries.add(entry);
+        // Add to top if sorting by date descending
+        entries.add(0, entry); 
         walletEntries.put(keyForUser(user), entries);
         storeService.saveWalletEntries(user, entries);
     }
@@ -376,6 +390,17 @@ public class DataRepository {
             return quizQuestion;
         }
         return null;
+    }
+
+    private void insertWalletEntry(User user, WalletEntry entry) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("owner_email", user.getEmail().toLowerCase(Locale.ROOT));
+        payload.addProperty("entry_type", entry.getType().toString().toLowerCase());
+        payload.addProperty("category", entry.getCategory());
+        payload.addProperty("amount", entry.getAmount());
+        payload.addProperty("note", entry.getNote());
+        payload.addProperty("entry_date", entry.getDate().toString());
+        supabaseClient.insertRecord("wallet_entries", null, payload, user.getAccessToken());
     }
 
     private JsonArray toJsonArray(List<String> values) {
@@ -521,6 +546,7 @@ public class DataRepository {
 
     private JobOpportunity toJobOpportunity(JsonObject json) {
         return new JobOpportunity(
+                safeString(json, "id", ""),
                 safeString(json, "title", "Job Opportunity"),
                 safeString(json, "company", "Partner Organisation"),
                 safeString(json, "location", "Unknown"),
@@ -544,20 +570,59 @@ public class DataRepository {
         );
     }
 
+    private StudentProfile toStudentProfile(JsonObject json) {
+        return new StudentProfile(
+                safeString(json, "id", ""),
+                safeString(json, "email", ""),
+                safeString(json, "role", "student"),
+                safeDateTime(json, "created_at", null)
+        );
+    }
+
+    public List<WalletEntry> fetchWalletByEmail(String userEmail) {
+        if (userEmail == null || userEmail.isEmpty()) return Collections.emptyList();
+        String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
+        String query = "user_email=eq." + encoded + "&order=created_at.desc";
+        return mapTable("wallet_entries", query, this::toWalletEntry, currentUser.getAccessToken());
+    }
+
     private StudentProgress toStudentProgress(JsonObject json) {
         return new StudentProgress(
-                safeString(json, "student_name", "Student"),
+                safeString(json, "student_name", "Unknown Student"),
+                safeString(json, "user_email", ""),
                 safeInt(json, "modules_completed", 0),
-                safeInt(json, "total_modules", 1),
+                safeInt(json, "total_modules", 0),
                 safeInt(json, "quizzes_taken", 0),
-                safeDouble(json, "average_score", 0),
-                safeDouble(json, "wallet_health_score", 0),
+                safeDouble(json, "average_score", 0.0),
+                safeDouble(json, "wallet_health_score", 0.0),
                 safeInt(json, "parivaar_points", 0),
                 safeInt(json, "employment_applications", 0),
                 safeInt(json, "job_saves", 0),
                 safeInt(json, "wallet_savings", 0),
                 safeInt(json, "alerts", 0)
         );
+    }
+
+    public StudentProgress getProgressForEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        String normalized = email.toLowerCase(Locale.ROOT);
+        if (studentProgressCache != null) {
+            for (StudentProgress progress : studentProgressCache) {
+                if (normalized.equals(progress.getUserEmail().toLowerCase(Locale.ROOT))) {
+                    return progress;
+                }
+            }
+        }
+        return fetchStudentProgressRecord(normalized);
+    }
+
+    private StudentProgress fetchStudentProgressRecord(String email) {
+        String encoded = URLEncoder.encode(email, StandardCharsets.UTF_8);
+        String query = "user_email=eq." + encoded + "&limit=1";
+        List<StudentProgress> matches = mapTable("student_progress", query, this::toStudentProgress);
+        return matches.isEmpty() ? null : matches.get(0);
     }
 
     private List<LessonCompletion> fetchLessonCompletions(User user) {
@@ -569,6 +634,16 @@ public class DataRepository {
         return mapTable("lesson_completions", query, this::toLessonCompletion, user.getAccessToken());
     }
 
+    public List<LessonCompletion> fetchLessonCompletionsByEmail(String userEmail) {
+        if (userEmail == null || userEmail.isBlank()) {
+            return List.of();
+        }
+        String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
+        String query = "user_email=eq." + encoded + "&order=completed_at.desc";
+        String token = currentUser != null ? currentUser.getAccessToken() : null;
+        return mapTable("lesson_completions", query, this::toLessonCompletion, token);
+    }
+
     private List<QuizAttempt> fetchQuizAttempts(User user) {
         if (user == null || user.getEmail() == null) {
             return List.of();
@@ -576,6 +651,16 @@ public class DataRepository {
         String encoded = URLEncoder.encode(user.getEmail().toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&order=created_at.desc";
         return mapTable("quiz_attempts", query, this::toQuizAttempt, user.getAccessToken());
+    }
+
+    public List<QuizAttempt> fetchQuizAttemptsByEmail(String userEmail) {
+        if (userEmail == null || userEmail.isBlank()) {
+            return List.of();
+        }
+        String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
+        String query = "user_email=eq." + encoded + "&order=created_at.desc";
+        String token = currentUser != null ? currentUser.getAccessToken() : null;
+        return mapTable("quiz_attempts", query, this::toQuizAttempt, token);
     }
 
     private void cacheLessonCompletion(LessonCompletion completion) {
@@ -699,13 +784,53 @@ public class DataRepository {
         return user.getEmail() + "|" + user.getRole().name();
     }
 
-    private List<WalletEntry> defaultWallet() {
-        return List.of(
-                new WalletEntry(WalletEntryType.INCOME, "Scholarship", 4500, "Monthly stipend", LocalDate.now().minusDays(12)),
-                new WalletEntry(WalletEntryType.INCOME, "Tutoring", 2200, "Math tutoring Grade 9", LocalDate.now().minusDays(5)),
-                new WalletEntry(WalletEntryType.EXPENSE, "Food", 1800, "Groceries and snacks", LocalDate.now().minusDays(3)),
-                new WalletEntry(WalletEntryType.EXPENSE, "Transport", 600, "Bus to school", LocalDate.now().minusDays(2)),
-                new WalletEntry(WalletEntryType.SAVINGS, "Savings", 3200, "Emergency fund", LocalDate.now().minusDays(7))
+
+    public void applyForJob(User user, JobOpportunity job) {
+        if (user == null || job == null) {
+            return;
+        }
+        JsonObject payload = new JsonObject();
+        payload.addProperty("job_id", job.getId());
+        payload.addProperty("user_email", user.getEmail().toLowerCase(Locale.ROOT));
+        payload.addProperty("status", "Pending");
+        supabaseClient.insertRecord("job_applications", null, payload, user.getAccessToken());
+    }
+
+    public List<JobApplication> fetchJobApplications(String userEmail) {
+        String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
+        String query = "user_email=eq." + encoded + "&order=applied_at.desc";
+        // We're doing a simple join manually since client doesn't support complex joins yet
+        return mapTable("job_applications", query, this::toJobApplication, currentUser.getAccessToken());
+    }
+
+    private JobApplication toJobApplication(JsonObject json) {
+        return new JobApplication(
+                safeString(json, "id", ""),
+                safeString(json, "job_id", ""),
+                safeString(json, "status", "Pending"),
+                safeDateTime(json, "applied_at", LocalDateTime.now())
         );
+    }
+    public boolean updateStudentProgress(StudentProgress progress) {
+        if (progress == null || progress.getUserEmail() == null) {
+            return false;
+        }
+        JsonObject payload = new JsonObject();
+        payload.addProperty("user_email", progress.getUserEmail().toLowerCase(Locale.ROOT));
+        payload.addProperty("student_name", progress.getStudentName());
+        payload.addProperty("modules_completed", progress.getModulesCompleted());
+        payload.addProperty("total_modules", progress.getTotalModules());
+        payload.addProperty("quizzes_taken", progress.getQuizzesTaken());
+        payload.addProperty("average_score", progress.getAverageScore());
+        payload.addProperty("wallet_health_score", progress.getWalletHealthScore());
+        payload.addProperty("parivaar_points", progress.getParivaarPoints());
+        payload.addProperty("employment_applications", progress.getEmploymentApplications());
+        payload.addProperty("job_saves", progress.getJobSaves());
+        payload.addProperty("wallet_savings", progress.getWalletSavings());
+        payload.addProperty("alerts", progress.getAlerts());
+
+        // Upsert based on user_email
+        JsonArray inserted = supabaseClient.insertRecord("student_progress", "on_conflict=user_email", payload, currentUser.getAccessToken());
+        return inserted != null && !inserted.isEmpty();
     }
 }

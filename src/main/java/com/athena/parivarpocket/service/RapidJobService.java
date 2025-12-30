@@ -57,6 +57,7 @@ public class RapidJobService {
             String jobUrl = jobLink.startsWith("http") ? jobLink : "https://in.indeed.com/viewjob?jk=" + jobLink;
  ;
             JobOpportunity job = new JobOpportunity(
+                    java.util.UUID.randomUUID().toString(),
                     title,
                     company,
                     location,

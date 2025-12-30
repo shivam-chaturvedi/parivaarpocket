@@ -1,19 +1,18 @@
 package com.athena.parivarpocket.ui;
 
 import com.athena.parivarpocket.model.BudgetGoal;
-import com.athena.parivarpocket.model.BudgetRecommendation;
 import com.athena.parivarpocket.model.User;
 import com.athena.parivarpocket.model.WalletEntry;
 import com.athena.parivarpocket.model.WalletEntryType;
-import com.athena.parivarpocket.service.BudgetOptimizer;
 import com.athena.parivarpocket.service.DataRepository;
 import com.athena.parivarpocket.service.OfflineSyncService;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.chart.PieChart;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -27,7 +26,6 @@ import java.util.stream.Collectors;
 public class WalletModuleView extends VBox {
     private final DataRepository repository;
     private final User user;
-    private final BudgetOptimizer optimizer;
     private final OfflineSyncService offlineSyncService;
     private List<WalletEntry> walletEntries;
     private BudgetGoal budgetGoal;
@@ -49,230 +47,205 @@ public class WalletModuleView extends VBox {
     private final ChoiceBox<String> entryTypeChoice = new ChoiceBox<>(FXCollections.observableArrayList("Expense", "Savings", "Income"));
     private final ChoiceBox<String> timeOfDayChoice = new ChoiceBox<>(FXCollections.observableArrayList("Morning", "Afternoon", "Evening", "Night"));
 
-    private final ChoiceBox<String> timeframeFilter = new ChoiceBox<>(FXCollections.observableArrayList("Today", "This Week", "This Month", "This Year", "Custom Range"));
-    private final ChoiceBox<String> typeFilter = new ChoiceBox<>(FXCollections.observableArrayList("All types", "Income", "Expense", "Savings"));
-    private final ChoiceBox<String> timeFilter = new ChoiceBox<>(FXCollections.observableArrayList("Any time", "Morning", "Afternoon", "Evening", "Night"));
-    private final DatePicker startPicker = new DatePicker();
-    private final DatePicker endPicker = new DatePicker();
-    private final VBox historyContainer = new VBox(8);
+    private final ChoiceBox<String> timeframeFilter = new ChoiceBox<>(FXCollections.observableArrayList("Today", "This Week", "This Month", "This Year"));
+    private final VBox historyContainer = new VBox(12);
     private final Label historySummaryLabel = new Label();
 
-    private final VBox recommendationsList = new VBox(8);
-    private final Label potentialSavingsValue = new Label();
-    private final Label yearlyImpactValue = new Label();
-    private final VBox distributionList = new VBox(8);
+    private final PieChart expenseChart = new PieChart();
+    private final VBox expenseLegend = new VBox(6);
 
-    public WalletModuleView(DataRepository repository, User user, BudgetOptimizer optimizer, OfflineSyncService offlineSyncService) {
+    public WalletModuleView(DataRepository repository, User user, OfflineSyncService offlineSyncService) {
         this.repository = repository;
         this.user = user;
-        this.optimizer = optimizer;
         this.offlineSyncService = offlineSyncService;
         this.walletEntries = new ArrayList<>(repository.loadWallet(user));
         this.budgetGoal = repository.getBudgetGoal(user);
 
-        setSpacing(18);
-        setPadding(new Insets(0, 0, 8, 0));
+        setSpacing(24);
+        setPadding(new Insets(0, 0, 24, 0));
+        getStyleClass().add("wallet-container");
 
-        getChildren().add(buildBudgetPanel());
-        getChildren().add(buildGoalPanel());
-        getChildren().add(buildEntryFormPanel());
-        getChildren().add(buildTimelinePanel());
-        getChildren().add(buildOptimizationPanel());
-        getChildren().add(buildExpenseDistributionPanel());
+        // Mobile-friendly vertical stack
+        getChildren().addAll(
+                buildBudgetPanel(),
+                buildVisualizationPanel(),
+                buildGoalPanel(),
+                buildEntryFormPanel(),
+                buildTimelinePanel()
+        );
 
         refreshAllSections();
     }
 
     private Panel buildBudgetPanel() {
-        HBox metrics = new HBox(14,
-                createMetric("Monthly Income", incomeValue),
-                createMetric("Monthly Expenses", expensesValue),
-                createMetric("Current Savings", savingsValue)
+        HBox metrics = new HBox(0,
+                createMetric("Income", incomeValue, "metric-income"),
+                createSeparator(),
+                createMetric("Expenses", expensesValue, "metric-expense"),
+                createSeparator(),
+                createMetric("Savings", savingsValue, "metric-savings")
         );
         metrics.setAlignment(Pos.CENTER);
+        metrics.setSpacing(0);
+        HBox.setHgrow(metrics, Priority.ALWAYS);
 
         budgetAlertLabel.getStyleClass().add("budget-alert");
         budgetAlertLabel.setWrapText(true);
 
-        VBox content = new VBox(12, metrics, budgetAlertLabel);
-        content.setPadding(new Insets(10));
-        Panel panel = new Panel("Budget Snapshot", content);
-        panel.getStyleClass().add("budget-panel");
+        VBox content = new VBox(16, metrics, budgetAlertLabel);
+        content.setPadding(new Insets(16));
+        Panel panel = new Panel("Overview", content);
+        panel.getStyleClass().add("wallet-card");
         return panel;
     }
 
-    private Panel buildGoalPanel() {
-        currentBudgetField.getStyleClass().add("wallet-form-input");
-        currentBudgetField.setPromptText("Current monthly budget (₹)");
-        targetSavingsField.getStyleClass().add("wallet-form-input");
-        targetSavingsField.setPromptText("Savings target (₹)");
-        goalStatusLabel.getStyleClass().add("goal-status");
+    private Region createSeparator() {
+        Region sep = new Region();
+        sep.setPrefWidth(1);
+        sep.setPrefHeight(40);
+        sep.setStyle("-fx-background-color: #e0e0e0;");
+        return sep;
+    }
 
-        Button saveGoal = new Button("Save goals");
-        saveGoal.getStyleClass().add("primary-button");
+    private Panel buildGoalPanel() {
+        currentBudgetField.getStyleClass().add("modern-input");
+        currentBudgetField.setPromptText("Budget limit (₹)");
+        targetSavingsField.getStyleClass().add("modern-input");
+        targetSavingsField.setPromptText("Goal (₹)");
+        goalStatusLabel.getStyleClass().add("goal-status");
+        goalStatusLabel.setWrapText(true);
+
+        Button saveGoal = new Button("Update Goals");
+        saveGoal.getStyleClass().add("secondary-button");
+        saveGoal.setMaxWidth(Double.MAX_VALUE);
         saveGoal.setOnAction(e -> {
             try {
                 double current = Double.parseDouble(currentBudgetField.getText().trim());
                 double target = Double.parseDouble(targetSavingsField.getText().trim());
                 budgetGoal = repository.upsertBudgetGoal(user, current, target);
                 updateGoalStatus();
-                goalStatusLabel.setText("Budget goals updated.");
+                showAlert("Success", "Budget goals updated successfully.");
             } catch (NumberFormatException ex) {
-                showAlert("Enter valid numeric values for budget and savings.");
+                showAlert("Error", "Please enter valid numbers.");
             }
         });
 
-        GridPane grid = new GridPane();
-        grid.setHgap(12);
-        grid.setVgap(10);
-        grid.add(new Label("Current budget"), 0, 0);
-        grid.add(currentBudgetField, 1, 0);
-        grid.add(new Label("Target savings"), 0, 1);
-        grid.add(targetSavingsField, 1, 1);
-
-        VBox content = new VBox(12, grid, saveGoal, goalStatusLabel);
-        content.setPadding(new Insets(10));
-        Panel panel = new Panel("Budget Planning & Targets", content);
-        panel.getStyleClass().add("budget-panel");
+        HBox inputs = new HBox(12, currentBudgetField, targetSavingsField);
+        
+        VBox content = new VBox(12, inputs, saveGoal, goalStatusLabel);
+        content.setPadding(new Insets(16));
+        Panel panel = new Panel("Targets", content);
+        panel.getStyleClass().add("wallet-card");
         return panel;
     }
 
     private Panel buildEntryFormPanel() {
-        itemField.setPromptText("Item or purpose (e.g. Groceries)");
-        itemField.getStyleClass().add("wallet-form-input");
-        categoryField.setPromptText("Category (Food, Transport... )");
-        categoryField.getStyleClass().add("wallet-form-input");
-        amountField.setPromptText("Amount (₹)");
-        amountField.getStyleClass().add("wallet-form-input");
-        purchaseNoteField.setPromptText("Notes (vendors, time, details)");
-        purchaseNoteField.getStyleClass().add("wallet-form-input");
-        entryDatePicker.getStyleClass().add("wallet-form-input");
+        itemField.setPromptText("What did you buy?");
+        itemField.getStyleClass().add("modern-input");
+        
+        categoryField.setPromptText("Category");
+        categoryField.getStyleClass().add("modern-input");
+        
+        amountField.setPromptText("₹ Amount");
+        amountField.getStyleClass().add("modern-input");
+        
+        purchaseNoteField.setPromptText("Add a note...");
+        purchaseNoteField.getStyleClass().add("modern-input");
+        
+        entryDatePicker.getStyleClass().add("modern-input");
         entryTypeChoice.getSelectionModel().select("Expense");
-        entryTypeChoice.getStyleClass().add("wallet-form-choice");
+        entryTypeChoice.getStyleClass().add("modern-choice");
         timeOfDayChoice.getSelectionModel().selectFirst();
-        timeOfDayChoice.getStyleClass().add("wallet-form-choice");
+        timeOfDayChoice.getStyleClass().add("modern-choice");
 
-        Button logEntry = new Button("Log today's purchase");
-        logEntry.getStyleClass().add("primary-button");
+        Button logEntry = new Button("Add Transaction");
+        logEntry.getStyleClass().add("primary-button-lg");
+        logEntry.setMaxWidth(Double.MAX_VALUE);
         logEntry.setOnAction(e -> recordEntry());
 
         GridPane grid = new GridPane();
         grid.setHgap(12);
-        grid.setVgap(10);
-        grid.add(new Label("Item"), 0, 0);
-        grid.add(itemField, 1, 0);
-        grid.add(new Label("Category"), 0, 1);
-        grid.add(categoryField, 1, 1);
-        grid.add(new Label("Amount"), 0, 2);
-        grid.add(amountField, 1, 2);
-        grid.add(new Label("Date"), 0, 3);
-        grid.add(entryDatePicker, 1, 3);
-        grid.add(new Label("Type"), 0, 4);
-        grid.add(entryTypeChoice, 1, 4);
-        grid.add(new Label("Time of day"), 0, 5);
-        grid.add(timeOfDayChoice, 1, 5);
-        grid.add(new Label("Notes"), 0, 6);
-        grid.add(purchaseNoteField, 1, 6);
+        grid.setVgap(16);
+        
+        grid.add(new Label("Type"), 0, 0);
+        grid.add(entryTypeChoice, 1, 0);
+        
+        grid.add(new Label("Amount"), 0, 1);
+        grid.add(amountField, 1, 1);
+        
+        grid.add(new Label("Details"), 0, 2);
+        grid.add(itemField, 1, 2);
+        
+        grid.add(new Label("Category"), 0, 3);
+        grid.add(categoryField, 1, 3);
+        
+        grid.add(new Label("Date"), 0, 4);
+        grid.add(entryDatePicker, 1, 4);
+        
+        grid.add(new Label("Note"), 0, 5);
+        grid.add(purchaseNoteField, 1, 5);
 
-        VBox content = new VBox(12, grid, logEntry);
-        content.setPadding(new Insets(10));
-        Panel panel = new Panel("Log Expenses & Savings", content);
-        panel.getStyleClass().add("budget-panel");
+        VBox content = new VBox(20, grid, logEntry);
+        content.setPadding(new Insets(20));
+        Panel panel = new Panel("New Entry", content);
+        panel.getStyleClass().add("wallet-card");
+        return panel;
+    }
+
+    private Panel buildVisualizationPanel() {
+        expenseChart.setLabelsVisible(false);
+        expenseChart.setLegendVisible(false);
+        expenseChart.setPrefHeight(220);
+        expenseChart.setMaxHeight(220);
+
+        StackPane chartContainer = new StackPane(expenseChart);
+        chartContainer.setAlignment(Pos.CENTER);
+        
+        expenseLegend.setAlignment(Pos.CENTER);
+        expenseLegend.setPadding(new Insets(10, 0, 0, 0));
+
+        HBox layout = new HBox(20, chartContainer, expenseLegend);
+        layout.setAlignment(Pos.CENTER_LEFT);
+        
+        VBox content = new VBox(10, layout);
+        content.setPadding(new Insets(16));
+        Panel panel = new Panel("Expense Breakdown", content);
+        panel.getStyleClass().add("wallet-card");
         return panel;
     }
 
     private Panel buildTimelinePanel() {
-        timeframeFilter.getSelectionModel().selectFirst();
-        timeframeFilter.setOnAction(e -> {
-            updateCustomRangeState();
-            refreshHistoryPanel();
-        });
-        timeframeFilter.getStyleClass().add("wallet-form-choice");
+        timeframeFilter.getSelectionModel().select("This Month");
+        timeframeFilter.setOnAction(e -> refreshHistoryPanel());
+        timeframeFilter.getStyleClass().add("modern-choice-sm");
 
-        typeFilter.getSelectionModel().selectFirst();
-        typeFilter.setOnAction(e -> refreshHistoryPanel());
-        typeFilter.getStyleClass().add("wallet-form-choice");
-
-        timeFilter.getSelectionModel().selectFirst();
-        timeFilter.setOnAction(e -> refreshHistoryPanel());
-        timeFilter.getStyleClass().add("wallet-form-choice");
-
-        startPicker.setDisable(true);
-        endPicker.setDisable(true);
-        startPicker.valueProperty().addListener((obs, old, value) -> refreshHistoryPanel());
-        endPicker.valueProperty().addListener((obs, old, value) -> refreshHistoryPanel());
-
-        HBox filters = new HBox(12,
-                new VBox(4, new Label("View by timeframe"), timeframeFilter),
-                new VBox(4, new Label("Type"), typeFilter),
-                new VBox(4, new Label("Time of day"), timeFilter),
-                new VBox(4, new Label("Range Start"), startPicker),
-                new VBox(4, new Label("Range End"), endPicker)
-        );
-        filters.setAlignment(Pos.CENTER_LEFT);
+        HBox header = new HBox(12, new Label("Recent Activity"), new Region(), timeframeFilter);
+        HBox.setHgrow(header.getChildren().get(1), Priority.ALWAYS);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.getStyleClass().add("timeline-header");
 
         historySummaryLabel.getStyleClass().add("history-summary");
 
-        historyContainer.setPadding(new Insets(10));
-        historyContainer.setStyle("-fx-background-color: transparent;");
-
+        historyContainer.setPadding(new Insets(8, 0, 0, 0));
         ScrollPane scrollPane = new ScrollPane(historyContainer);
         scrollPane.setFitToWidth(true);
-        scrollPane.setPrefHeight(260);
-        scrollPane.setStyle("-fx-background: transparent;");
-        scrollPane.getStyleClass().add("history-scroll");
+        scrollPane.setPrefHeight(300);
+        scrollPane.getStyleClass().add("transparent-scroll");
 
-        VBox content = new VBox(12, filters, historySummaryLabel, scrollPane);
-        content.setPadding(new Insets(10));
-        Panel panel = new Panel("Expense & Savings Timeline", content);
-        panel.getStyleClass().add("budget-panel");
+        VBox content = new VBox(12, header, historySummaryLabel, scrollPane);
+        content.setPadding(new Insets(16));
+        Panel panel = new Panel(null, content); // Custom header inside
+        panel.getStyleClass().add("wallet-card");
         return panel;
     }
 
-    private Panel buildOptimizationPanel() {
-        Label header = new Label("Optimization Recommendations");
-        header.getStyleClass().add("optimization-title");
-
-        recommendationsList.setPadding(new Insets(4, 0, 0, 0));
-
-        HBox stats = new HBox(12,
-                createOptimizationStat("Potential monthly savings", potentialSavingsValue),
-                createOptimizationStat("Yearly impact", yearlyImpactValue)
-        );
-        stats.setAlignment(Pos.CENTER_LEFT);
-        stats.getStyleClass().add("optimization-stats");
-
-        VBox content = new VBox(10, header, recommendationsList, stats);
-        content.setPadding(new Insets(10));
-        Panel panel = new Panel("Budget Optimization Analysis", content);
-        panel.getStyleClass().addAll("budget-panel", "optimization-panel");
-        return panel;
-    }
-
-    private Panel buildExpenseDistributionPanel() {
-        distributionList.setPadding(new Insets(4, 0, 0, 0));
-        Panel panel = new Panel("Expense Distribution", distributionList);
-        panel.getStyleClass().add("budget-panel");
-        return panel;
-    }
-
-    private VBox createMetric(String label, Label valueLabel) {
+    private VBox createMetric(String label, Label valueLabel, String styleClass) {
         Label title = new Label(label);
-        title.getStyleClass().add("budget-metric-label");
-        valueLabel.getStyleClass().add("budget-metric-value");
-        VBox box = new VBox(4, title, valueLabel);
-        box.setPadding(new Insets(10));
-        box.getStyleClass().add("budget-metric-card");
-        return box;
-    }
-
-    private VBox createOptimizationStat(String titleText, Label valueLabel) {
-        Label title = new Label(titleText);
-        title.getStyleClass().add("optimization-stat-label");
-        valueLabel.getStyleClass().add("optimization-stat-value");
-        VBox box = new VBox(4, title, valueLabel);
-        box.setPadding(new Insets(12));
-        box.getStyleClass().add("optimization-stat-box");
+        title.getStyleClass().add("metric-title");
+        valueLabel.getStyleClass().addAll("metric-value", styleClass);
+        VBox box = new VBox(4, valueLabel, title);
+        box.setAlignment(Pos.CENTER);
+        box.setPadding(new Insets(0, 24, 0, 24));
         return box;
     }
 
@@ -280,8 +253,7 @@ public class WalletModuleView extends VBox {
         refreshBudgetPanel();
         refreshGoalPanel();
         refreshHistoryPanel();
-        refreshOptimizationPanel();
-        refreshDistributionPanel();
+        refreshCharts();
     }
 
     private void refreshBudgetPanel() {
@@ -296,10 +268,14 @@ public class WalletModuleView extends VBox {
         expensesValue.setText("₹" + Math.round(expenses));
         savingsValue.setText("₹" + Math.round(savings));
 
-        String alert = expenses >= income
-                ? "Budget Alert! Your expenses equal or exceed your income. Cut back a little to protect savings."
-                : "Expenses (₹" + Math.round(expenses) + ") are being tracked against your income (₹" + Math.round(income) + ").";
-        budgetAlertLabel.setText(alert);
+        if (expenses >= income && income > 0) {
+            budgetAlertLabel.setText("⚠️ Warning: Expenses exceed income.");
+            budgetAlertLabel.getStyleClass().add("alert-danger");
+        } else {
+            double remaining = income - expenses;
+            budgetAlertLabel.setText("You have ₹" + Math.round(remaining) + " remaining this month.");
+            budgetAlertLabel.getStyleClass().remove("alert-danger");
+        }
     }
 
     private void refreshGoalPanel() {
@@ -308,137 +284,127 @@ public class WalletModuleView extends VBox {
             targetSavingsField.setText(String.valueOf(Math.round(budgetGoal.getTargetSavings())));
             updateGoalStatus();
         } else {
-            goalStatusLabel.setText("Set a goal to see guiding insights.");
+            goalStatusLabel.setText("Set a budget and savings goal to track your progress.");
         }
     }
 
     private void updateGoalStatus() {
         double expenses = repository.calculateExpenses(walletEntries);
         double target = budgetGoal != null ? budgetGoal.getTargetSavings() : 0;
-        double delta = target - expenses;
+        double income = repository.calculateIncome(walletEntries);
+        double currentSavings = income - expenses; // Simple calc
+        
+        double delta = target - currentSavings;
         if (delta > 0) {
-            goalStatusLabel.setText("Need ₹" + Math.round(delta) + " more to hit savings target.");
-        } else {
-            goalStatusLabel.setText("On track! You have reached your savings target.");
+            goalStatusLabel.setText("🎯 " + Math.round((currentSavings / target) * 100) + "% to savings goal (₹" + Math.round(delta) + " to go)");
+        } else if (target > 0) {
+            goalStatusLabel.setText("🎉 Savings goal reached!");
         }
     }
 
     private void refreshHistoryPanel() {
         List<WalletEntry> filtered = filterEntries();
-        double income = filtered.stream()
-                .filter(e -> e.getType() == WalletEntryType.INCOME)
-                .mapToDouble(WalletEntry::getAmount)
-                .sum();
-        double expenses = filtered.stream()
-                .filter(e -> e.getType() == WalletEntryType.EXPENSE)
-                .mapToDouble(WalletEntry::getAmount)
-                .sum();
-        double savings = filtered.stream()
-                .filter(e -> e.getType() == WalletEntryType.SAVINGS)
-                .mapToDouble(WalletEntry::getAmount)
-                .sum();
-
-        historySummaryLabel.setText(String.format("Showing %d entries — Income ₹%d • Expenses ₹%d • Savings ₹%d",
-                filtered.size(),
-                Math.round(income),
-                Math.round(expenses),
-                Math.round(savings)));
-
+        
+        historySummaryLabel.setText(filtered.size() + " transactions in this period");
         historyContainer.getChildren().clear();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM");
+        
+        if (filtered.isEmpty()) {
+            Label empty = new Label("No transactions found.");
+            empty.setStyle("-fx-text-fill: #999; -fx-padding: 20;");
+            historyContainer.getChildren().add(empty);
+            return;
+        }
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd");
+        
         for (WalletEntry entry : filtered) {
-            Label dateLabel = new Label(entry.getDate().format(formatter));
-            dateLabel.getStyleClass().add("history-date");
-            Label detail = new Label(entry.getCategory() + " • " + entry.getNote());
-            detail.getStyleClass().add("history-note");
-            Label amount = new Label((entry.getType() == WalletEntryType.EXPENSE ? "-" : "+") + "₹" + Math.round(entry.getAmount()));
-            amount.getStyleClass().add("history-amount");
-            HBox row = new HBox(16, dateLabel, detail, amount);
-            row.setAlignment(Pos.CENTER_LEFT);
-            row.getStyleClass().add("history-row");
-            historyContainer.getChildren().add(row);
+             HBox row = new HBox(12);
+             row.setAlignment(Pos.CENTER_LEFT);
+             row.getStyleClass().add("transaction-row");
+             row.setPadding(new Insets(12));
+
+             Label dateIcon = new Label(entry.getDate().format(formatter).replace(" ", "\n"));
+             dateIcon.setAlignment(Pos.CENTER);
+             dateIcon.getStyleClass().add("date-badge");
+             dateIcon.setPrefWidth(50);
+
+             VBox details = new VBox(2);
+             Label title = new Label(entry.getCategory());
+             title.getStyleClass().add("trans-title");
+             Label subtitle = new Label(entry.getNote().isEmpty() ? entry.getType().toString() : entry.getNote());
+             subtitle.getStyleClass().add("trans-subtitle");
+             details.getChildren().addAll(title, subtitle);
+             
+             Region spacer = new Region();
+             HBox.setHgrow(spacer, Priority.ALWAYS);
+
+             String prefix = entry.getType() == WalletEntryType.EXPENSE ? "-" : "+";
+             String colorClass = entry.getType() == WalletEntryType.EXPENSE ? "amount-neg" : "amount-pos";
+             Label amount = new Label(prefix + "₹" + Math.round(entry.getAmount()));
+             amount.getStyleClass().addAll("trans-amount", colorClass);
+
+             row.getChildren().addAll(dateIcon, details, spacer, amount);
+             historyContainer.getChildren().add(row);
         }
     }
 
-    private void refreshOptimizationPanel() {
-        List<BudgetRecommendation> recommendations = optimizer.recommend(walletEntries);
-        recommendationsList.getChildren().clear();
-        recommendations.forEach(rec -> {
-            Label bullet = new Label("• " + rec.getDetail());
-            bullet.setWrapText(true);
-            bullet.getStyleClass().add("optimization-bullet");
-            recommendationsList.getChildren().add(bullet);
-        });
+    private void refreshCharts() {
+        Map<String, Double> expensesByCategory = walletEntries.stream()
+                .filter(e -> e.getType() == WalletEntryType.EXPENSE)
+                .collect(Collectors.groupingBy(WalletEntry::getCategory, Collectors.summingDouble(WalletEntry::getAmount)));
 
-        double expenses = repository.calculateExpenses(walletEntries);
-        double currentBudget = budgetGoal != null ? budgetGoal.getCurrentBudget() : repository.calculateIncome(walletEntries);
-        double potential = Math.max(0, currentBudget - expenses);
-        potentialSavingsValue.setText("₹" + Math.round(potential));
-        yearlyImpactValue.setText("₹" + Math.round(potential * 12));
-    }
-
-    private void refreshDistributionPanel() {
-        Map<String, Double> totals = new LinkedHashMap<>();
-        double total = walletEntries.stream().mapToDouble(WalletEntry::getAmount).sum();
-        for (WalletEntry entry : walletEntries) {
-            String category = entry.getCategory();
-            if (category == null || category.isBlank()) {
-                category = "Other";
-            }
-            totals.merge(category, entry.getAmount(), Double::sum);
+        ObservableList<PieChart.Data> chartData = FXCollections.observableArrayList();
+        expensesByCategory.forEach((cat, amt) -> chartData.add(new PieChart.Data(cat, amt)));
+        
+        expenseChart.setData(chartData);
+        
+        // Custom Legend
+        expenseLegend.getChildren().clear();
+        double totalExpense = expensesByCategory.values().stream().mapToDouble(Double::doubleValue).sum();
+        
+        int count = 0;
+        for (Map.Entry<String, Double> entry : expensesByCategory.entrySet()) {
+            if (count++ > 5) break; // Limit legend items
+            double pct = (entry.getValue() / totalExpense) * 100;
+            HBox item = new HBox(8);
+            item.setAlignment(Pos.CENTER_LEFT);
+            Region dot = new Region();
+            dot.setPrefSize(12, 12);
+            dot.setStyle("-fx-background-color: " + getColorForIndex(count) + "; -fx-background-radius: 6;");
+            
+            Label name = new Label(entry.getKey());
+            name.getStyleClass().add("legend-label");
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            Label val = new Label(String.format("%.1f%%", pct));
+            val.getStyleClass().add("legend-value");
+            
+            item.getChildren().addAll(dot, name, spacer, val);
+            expenseLegend.getChildren().add(item);
         }
-
-        distributionList.getChildren().clear();
-        totals.entrySet().stream()
-                .limit(6)
-                .forEach(entry -> distributionList.getChildren().add(distributionRow(entry.getKey(),
-                        total > 0 ? (entry.getValue() / total) * 100 : 0)));
+    }
+    
+    // Naive color generator matching JavaFX defaults roughly
+    private String getColorForIndex(int i) {
+        String[] colors = {"#f3622d", "#fba71b", "#57b757", "#41a9c9", "#4258c9", "#9a42c8", "#c84164", "#888888"};
+        return colors[i % colors.length];
     }
 
     private List<WalletEntry> filterEntries() {
+        // Simplified filter logic for demo
         String timeframe = timeframeFilter.getValue();
-        LocalDate start = null;
-        LocalDate end = null;
-        LocalDate today = LocalDate.now();
-        if ("Today".equals(timeframe)) {
-            start = today;
-            end = today;
-        } else if ("This Week".equals(timeframe)) {
-            start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-            end = start.plusDays(6);
-        } else if ("This Month".equals(timeframe)) {
-            start = today.withDayOfMonth(1);
-            end = start.with(TemporalAdjusters.lastDayOfMonth());
-        } else if ("This Year".equals(timeframe)) {
-            start = today.withDayOfYear(1);
-            end = today.with(TemporalAdjusters.lastDayOfYear());
-        } else if ("Custom Range".equals(timeframe)) {
-            start = startPicker.getValue();
-            end = endPicker.getValue();
-        }
-
-        String type = typeFilter.getValue();
-        String timeOfDay = timeFilter.getValue();
-        LocalDate effectiveStart = start;
-        LocalDate effectiveEnd = end;
-
+        LocalDate now = LocalDate.now();
+        LocalDate start = switch (timeframe) {
+            case "This Week" -> now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            case "This Month" -> now.withDayOfMonth(1);
+            case "This Year" -> now.withDayOfYear(1);
+            default -> now; // "Today"
+        };
+        
         return walletEntries.stream()
-                .filter(entry -> (effectiveStart == null || !entry.getDate().isBefore(effectiveStart)))
-                .filter(entry -> (effectiveEnd == null || !entry.getDate().isAfter(effectiveEnd)))
-                .filter(entry -> "All types".equals(type) || entry.getType().name().equalsIgnoreCase(type))
-                .filter(entry -> timeOfDay == null || "Any time".equals(timeOfDay) || containsIgnoreCase(entry.getNote(), timeOfDay))
+                .filter(e -> !e.getDate().isBefore(start))
                 .sorted((a, b) -> b.getDate().compareTo(a.getDate()))
                 .collect(Collectors.toList());
-    }
-
-    private boolean containsIgnoreCase(String source, String needle) {
-        return source != null && source.toLowerCase().contains(needle.toLowerCase());
-    }
-
-    private void updateCustomRangeState() {
-        boolean custom = "Custom Range".equals(timeframeFilter.getValue());
-        startPicker.setDisable(!custom);
-        endPicker.setDisable(!custom);
     }
 
     private void recordEntry() {
@@ -446,27 +412,31 @@ public class WalletModuleView extends VBox {
             String item = itemField.getText().trim();
             String category = categoryField.getText().trim();
             String note = purchaseNoteField.getText().trim();
-            if (!timeOfDayChoice.getValue().isBlank()) {
-                note = timeOfDayChoice.getValue() + " • " + note;
-            }
             double amount = Double.parseDouble(amountField.getText().trim());
             LocalDate date = entryDatePicker.getValue() != null ? entryDatePicker.getValue() : LocalDate.now();
+            
             WalletEntryType type = switch (entryTypeChoice.getValue()) {
                 case "Income" -> WalletEntryType.INCOME;
                 case "Savings" -> WalletEntryType.SAVINGS;
                 default -> WalletEntryType.EXPENSE;
             };
+
             WalletEntry entry = new WalletEntry(type,
                     category.isBlank() ? "General" : category,
                     amount,
-                    (item.isBlank() ? note : item + " • " + note).trim(),
+                    (item.isBlank() ? note : item + (note.isEmpty() ? "" : " • " + note)).trim(),
                     date);
+            
             repository.addWalletEntry(user, entry);
             walletEntries.add(0, entry);
+            
             refreshAllSections();
             clearEntryForm();
         } catch (NumberFormatException ex) {
-            showAlert("Enter a valid numeric amount for the purchase.");
+            showAlert("Invalid Input", "Please enter a valid numeric amount.");
+        } catch (Exception ex) {
+            ex.printStackTrace(); // Log for debug
+            showAlert("Error Adding Entry", "Failed to save entry: " + ex.getMessage());
         }
     }
 
@@ -476,34 +446,11 @@ public class WalletModuleView extends VBox {
         amountField.clear();
         purchaseNoteField.clear();
         entryDatePicker.setValue(LocalDate.now());
-        entryTypeChoice.getSelectionModel().select("Expense");
-        timeOfDayChoice.getSelectionModel().selectFirst();
     }
 
-    private void showAlert(String message) {
-        Alert alert = new Alert(Alert.AlertType.WARNING, message, ButtonType.OK);
-        alert.setHeaderText("Budget entry");
-        alert.showAndWait();
-    }
-
-    private HBox distributionRow(String label, double percentage) {
-        Label title = new Label(label);
-        title.getStyleClass().add("budget-distribution-label");
-        StackPane bar = new StackPane();
-        bar.setPrefWidth(260);
-        bar.setPrefHeight(14);
-        bar.getStyleClass().add("distribution-backdrop");
-        Region fill = new Region();
-        fill.getStyleClass().add("distribution-fill");
-        fill.setPrefWidth(2.3 * percentage);
-        fill.setPrefHeight(14);
-        bar.getChildren().add(fill);
-        Label pct = new Label(String.format("%.1f%%", percentage));
-        pct.getStyleClass().add("budget-distribution-pct");
-        HBox row = new HBox(12, title, bar, pct);
-        row.setAlignment(Pos.CENTER_LEFT);
-        row.setPadding(new Insets(4, 0, 4, 0));
-        row.getStyleClass().add("expense-distribution-row");
-        return row;
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION, message, ButtonType.OK);
+        alert.setHeaderText(title);
+        alert.show();
     }
 }

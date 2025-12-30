@@ -1,0 +1,478 @@
+/* Educator Dashboard Modern Styles - Formal B&W */
+
+.hero-stat-card {
+    -fx-background-color: white;
+    -fx-background-radius: 8;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.1), 8, 0, 0, 2);
+    -fx-border-color: #333;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+}
+
+.hero-stat-value {
+    -fx-text-fill: #000;
+    -fx-font-size: 28px;
+    font-size: 28px;
+    -fx-font-weight: bold;
+    font-weight: bold;
+}
+
+.hero-stat-title {
+    -fx-text-fill: #666;
+    -fx-font-size: 14px;
+    font-size: 14px;
+    -fx-font-weight: bold;
+    font-weight: bold;
+    -fx-text-transform: uppercase;
+}
+
+.modern-search-bar {
+    -fx-background-color: white;
+    -fx-background-radius: 4;
+    -fx-border-color: #333;
+    -fx-border-radius: 4;
+    -fx-padding: 8 16;
+    padding: 8px 16px;
+    -fx-text-fill: black;
+}
+
+.modern-combo {
+    -fx-background-color: white;
+    -fx-background-radius: 4;
+    -fx-border-color: #333;
+    -fx-border-radius: 4;
+}
+
+.student-card {
+    -fx-background-color: white;
+    -fx-background-radius: 4;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.1), 5, 0, 0, 1);
+    -fx-border-color: #000;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+}
+
+.student-avatar {
+    -fx-background-color: #000;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    font-weight: bold;
+    -fx-font-size: 18px;
+    font-size: 18px;
+    -fx-min-width: 40px;
+    -fx-min-height: 40px;
+    -fx-max-width: 40px;
+    -fx-max-height: 40px;
+    -fx-alignment: center;
+    -fx-background-radius: 20;
+}
+
+.card-title {
+    -fx-font-size: 16px;
+    font-size: 16px;
+    -fx-font-weight: bold;
+    font-weight: bold;
+    -fx-text-fill: #000;
+}
+
+.status-badge {
+    -fx-padding: 2 8;
+    padding: 2px 8px;
+    -fx-background-radius: 4;
+    -fx-font-size: 10px;
+    font-size: 10px;
+    -fx-font-weight: bold;
+    font-weight: bold;
+    -fx-border-color: #000;
+    -fx-border-width: 1;
+}
+
+/* B&W Badges: Distinguish by fill or border style/text */
+.badge-green {
+    -fx-background-color: white;
+    -fx-text-fill: #000;
+    -fx-border-color: #000;
+}
+
+.badge-blue {
+    -fx-background-color: #f0f0f0;
+    -fx-text-fill: #000;
+    -fx-border-color: #666;
+}
+
+.badge-yellow {
+    -fx-background-color: white;
+    -fx-text-fill: #333;
+    -fx-border-style: dashed;
+    -fx-border-color: #333;
+}
+
+.badge-red {
+    -fx-background-color: #000;
+    -fx-text-fill: white;
+    -fx-border-color: #000;
+}
+
+.metric-label-sm {
+    -fx-text-fill: #666;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.metric-value-sm {
+    -fx-text-fill: #000;
+    -fx-font-size: 12px;
+    -fx-font-weight: normal;
+}
+
+.placeholder-text {
+    -fx-text-fill: #333;
+    -fx-font-size: 14px;
+    font-size: 14px;
+    -fx-padding: 20;
+    padding: 20px;
+    -fx-font-style: italic;
+    font-style: italic;
+}
+
+.job-history-card {
+    -fx-background-color: white;
+    -fx-background-radius: 0;
+    -fx-border-color: #ccc;
+    -fx-border-radius: 0;
+    -fx-border-width: 0 0 1 0;
+}
+
+.job-title-sm {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: #000;
+}
+
+.job-date-sm {
+    -fx-text-fill: #666;
+    -fx-font-size: 11px;
+}
+
+.status-pill {
+    -fx-padding: 2 6;
+    padding: 2px 6px;
+    -fx-background-radius: 4;
+    -fx-font-size: 10px;
+    font-size: 10px;
+    -fx-border-color: #000;
+    -fx-border-width: 1;
+    -fx-background-color: white;
+    -fx-text-fill: black;
+}
+
+.modern-dialog>.dialog-pane {
+    -fx-background-color: white;
+    -fx-border-color: black;
+    -fx-border-width: 2;
+}
+
+.modern-tabs .tab-header-area .tab-header-background {
+    -fx-background-color: white;
+}
+
+.modern-tabs .tab {
+    -fx-background-color: white;
+    -fx-border-color: #ccc;
+    -fx-border-width: 1 1 0 1;
+}
+
+.modern-tabs .tab:selected {
+    -fx-background-color: #000;
+}
+
+.modern-tabs .tab:selected .text {
+    -fx-fill: white;
+}
+
+.modern-tabs .tab .text {
+    -fx-fill: black;
+}
+
+/* Educator Dashboard Modern Styles - Formal B&W */
+
+.dashboard-container {
+    -fx-background-color: white;
+}
+
+.dashboard-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: black;
+}
+
+.dashboard-subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: #666;
+}
+
+.section-container {
+    -fx-background-color: #f5f5f5;
+    /* Light grey bg for sections as seen in screenshot */
+    -fx-border-color: #ccc;
+    -fx-border-width: 1;
+}
+
+.section-header {
+    -fx-font-weight: bold;
+    font-weight: bold;
+    -fx-font-size: 14px;
+    font-size: 14px;
+    -fx-padding: 0 0 16 0;
+    padding: 0px 0px 16px 0px;
+}
+
+/* Stat Cards */
+.stat-card-bw {
+    -fx-background-color: #e0e0e0;
+    /* Greyish bg */
+    -fx-border-color: #999;
+    -fx-border-width: 1;
+}
+
+.stat-value-bw {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: black;
+}
+
+.stat-title-bw {
+    -fx-font-size: 12px;
+    -fx-text-fill: #333;
+}
+
+/* Controls */
+.modern-search-bar {
+    -fx-background-color: white;
+    -fx-border-color: #ccc;
+    -fx-border-width: 1;
+    -fx-padding: 8;
+    padding: 8px;
+}
+
+.icon-button-bw {
+    -fx-background-color: black;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.secondary-button-bw {
+    -fx-background-color: white;
+    -fx-border-color: black;
+    border-color: black;
+    -fx-text-fill: black;
+    -fx-padding: 6 12;
+    padding: 6px 12px;
+}
+
+/* Table */
+/* Table */
+.bw-table {
+    -fx-background-color: black;
+    background-color: black;
+    -fx-base: black;
+    -fx-control-inner-background: black;
+    -fx-control-inner-background-alt: black;
+    -fx-table-cell-border-color: transparent;
+    -fx-table-header-border-color: transparent;
+    -fx-padding: 0;
+    padding: 0px;
+}
+
+.bw-table .virtual-flow {
+    -fx-background-color: black;
+    background-color: black;
+}
+
+.bw-table .table-row-cell {
+    -fx-background-color: black;
+    background-color: black;
+}
+
+.bw-table .table-row-cell:odd {
+    -fx-background-color: black;
+    background-color: black;
+}
+
+.bw-table .table-row-cell:selected {
+    -fx-background-color: #333;
+    background-color: #333;
+}
+
+.bw-table .column-header-background {
+    -fx-background-color: black;
+    background-color: black;
+    -fx-background-insets: 0;
+}
+
+.bw-table .column-header {
+    -fx-background-color: black;
+    background-color: black;
+    -fx-size: 45px;
+    height: 45px;
+    -fx-border-color: #333;
+    border-color: #333;
+    -fx-border-width: 0 0 1 0;
+    border-width: 0 0 1px 0;
+}
+
+.bw-table .column-header .label {
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    font-size: 13px;
+    -fx-font-weight: bold;
+    font-weight: bold;
+    -fx-alignment: CENTER_LEFT;
+}
+
+.bw-table .table-cell {
+    -fx-text-fill: white;
+    color: white;
+    -fx-alignment: center-left;
+    -fx-padding: 15;
+    padding: 15px;
+    -fx-border-width: 0;
+}
+
+.cell-name-bw {
+    -fx-font-weight: bold;
+    font-weight: bold;
+    -fx-font-size: 14px;
+    font-size: 14px;
+    -fx-text-fill: white;
+    color: white;
+}
+
+.cell-subtext-bw {
+    -fx-font-size: 11px;
+    font-size: 11px;
+    -fx-text-fill: #ccc;
+    color: #ccc;
+}
+
+.cell-text-bw {
+    -fx-text-fill: white;
+    color: white;
+}
+
+.cell-highlight-bw {
+    -fx-font-weight: bold;
+    font-weight: bold;
+    -fx-font-size: 16px;
+    font-size: 16px;
+    -fx-text-fill: white;
+    color: white;
+}
+
+.bw-progress-bar .track {
+    -fx-background-color: #eee;
+}
+
+.bw-progress-bar .bar {
+    -fx-background-color: black;
+    -fx-background-insets: 0;
+}
+
+/* Badges */
+.bw-badge {
+    -fx-padding: 2 8;
+    padding: 2px 8px;
+    -fx-border-radius: 0;
+    -fx-border-color: black;
+    -fx-border-width: 1;
+    -fx-font-size: 10px;
+    font-size: 10px;
+}
+
+.bw-badge-excellent {
+    -fx-background-color: white;
+    -fx-text-fill: black;
+}
+
+.bw-badge-good {
+    -fx-background-color: #f0f0f0;
+    -fx-text-fill: black;
+}
+
+.bw-badge-needs-attention {
+    -fx-background-color: #ddd;
+    -fx-text-fill: black;
+    -fx-border-style: dashed;
+}
+
+.bw-badge-fair {
+    -fx-background-color: white;
+    -fx-text-fill: black;
+}
+
+/* Charts */
+.bw-chart {
+    -fx-background-color: white;
+    -fx-border-color: #ccc;
+    -fx-border-width: 1;
+}
+
+.chart-title {
+    -fx-text-fill: black;
+    -fx-font-size: 14px;
+    font-size: 14px;
+    -fx-font-weight: bold;
+    font-weight: bold;
+}
+
+.chart-legend-item {
+    -fx-text-fill: #333;
+}
+
+.default-color0.chart-pie {
+    -fx-pie-color: #333;
+}
+
+.default-color1.chart-pie {
+    -fx-pie-color: #666;
+}
+
+.default-color2.chart-pie {
+    -fx-pie-color: #999;
+}
+
+.default-color3.chart-pie {
+    -fx-pie-color: #ccc;
+}
+
+.default-color0.chart-bar {
+    -fx-bar-fill: #333;
+}
+
+.default-color1.chart-bar {
+    -fx-bar-fill: #666;
+}
+
+/* Ensure black buttons have white text explicitly */
+/* Ensure buttons are formal B&W (Black BG, White Text) */
+.action-button-bw,
+.icon-button-bw,
+.primary-button-bw {
+    -fx-background-color: rgb(252, 247, 247);
+    -fx-text-fill: rgb(15, 1, 1) !important;
+    -fx-border-color: black;
+    -fx-border-width: 1;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.action-button-bw:hover,
+.icon-button-bw:hover,
+.primary-button-bw:hover {
+    -fx-background-color: #333;
+}
+
+.placeholder-text {
+    -fx-text-fill: #666;
+    -fx-font-style: italic;
+}

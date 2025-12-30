@@ -12,17 +12,15 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 
 import java.util.List;
 
 public class StudentDashboardView extends VBox {
     public StudentDashboardView(User user, DataRepository repository) {
-        setSpacing(20);
-        setPadding(new Insets(16));
+        setSpacing(24);
+        setPadding(new Insets(24));
+        getStyleClass().add("dashboard-container");
 
         List<Lesson> lessons = repository.getLessons();
         int modulesCompleted = (int) lessons.stream().filter(l -> l.getProgressPercent() >= 70).count();
@@ -33,9 +31,28 @@ public class StudentDashboardView extends VBox {
         int coins = quizResults.stream().mapToInt(QuizResult::getCoinsAwarded).sum();
         String badgeLabel = determineBadge(modulesCompleted);
 
+        // Hero Section
         getChildren().add(buildWelcomePanel(user, modulesCompleted, lessons.size(), coins, badgeLabel));
-        getChildren().add(buildLearningProgress(modulesCompleted, lessons.size(), quizzesTaken, averageScore, bestScore));
-        getChildren().add(buildWalletSummary(repository, user));
+
+        // Stats Grid (Learning & Wallet side-by-side)
+        HBox summaryGrid = new HBox(24);
+        summaryGrid.setAlignment(Pos.TOP_LEFT);
+        
+        Region spacer = new Region();
+        
+        VBox learningPanel = buildLearningProgress(modulesCompleted, lessons.size(), quizzesTaken, averageScore, bestScore);
+        VBox walletPanel = buildWalletSummary(repository, user);
+        
+        learningPanel.setPrefWidth(400);
+        walletPanel.setPrefWidth(400);
+        
+        HBox.setHgrow(learningPanel, Priority.ALWAYS);
+        HBox.setHgrow(walletPanel, Priority.ALWAYS);
+
+        summaryGrid.getChildren().addAll(learningPanel, walletPanel);
+        getChildren().add(summaryGrid);
+
+        // Jobs Section
         List<JobOpportunity> jobOpportunities = repository.getJobOpportunities();
         getChildren().add(buildBookmarkedJobs(jobOpportunities));
     }
@@ -45,162 +62,176 @@ public class StudentDashboardView extends VBox {
                                     int moduleTotal,
                                     int coins,
                                     String badgeLabel) {
-        Label title = new Label("Welcome, " + user.getName());
-        title.setStyle("-fx-font-size: 22px; -fx-font-weight: 800;");
-        Label subtitle = new Label("Keep up the great work!");
-        subtitle.setStyle("-fx-text-fill: #3a3a3a; -fx-font-size: 13px;");
+        Label greeting = new Label("Good " + getTimeOfDay() + ", " + user.getName().split(" ")[0]);
+        greeting.getStyleClass().add("hero-greeting");
+        
+        Label subtitle = new Label("You're making great progress towards your financial goals.");
+        subtitle.getStyleClass().add("hero-subtitle");
 
-        VBox left = new VBox(6, title, subtitle);
+        VBox left = new VBox(8, greeting, subtitle);
+        left.setAlignment(Pos.CENTER_LEFT);
 
-        VBox coinsBox = createHeroMetric("ParivaarCoins", String.valueOf(coins), "Coin balance");
-        VBox badgeBox = createHeroMetric("Current Badge", badgeLabel, "Level unlocked");
-        HBox metrics = new HBox(14, coinsBox, badgeBox);
+        VBox coinsBox = createHeroMetric("ParivaarCoins", String.valueOf(coins), "Keep earning!");
+        VBox badgeBox = createHeroMetric("Current Badge", badgeLabel, modulesCompleted + " modules done");
+        
+        HBox metrics = new HBox(32, coinsBox, badgeBox);
         metrics.setAlignment(Pos.CENTER_RIGHT);
+        
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox content = new HBox(16, left, spacer, metrics);
+        HBox content = new HBox(24, left, spacer, metrics);
         content.setAlignment(Pos.CENTER_LEFT);
-        Panel panel = new Panel("Student Dashboard", content);
-        panel.getStyleClass().add("hero-panel");
+        
+        Panel panel = new Panel(null, content);
+        panel.getStyleClass().add("hero-banner");
+        panel.setPadding(new Insets(32));
         return panel;
     }
 
-    private Panel buildLearningProgress(int modulesCompleted,
+    private VBox buildLearningProgress(int modulesCompleted,
                                         int moduleTotal,
                                         int quizzesTaken,
                                         int averageScore,
                                         int bestScore) {
-        Label label = new Label("Modules Completed");
-        label.setStyle("-fx-font-weight: 600; -fx-text-fill: #2a2a2a;");
-        Label ratio = new Label(modulesCompleted + " / " + moduleTotal);
-        ratio.setStyle("-fx-font-weight: 700; -fx-font-size: 14px;");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox header = new HBox(8, label, spacer, ratio);
-        header.setAlignment(Pos.CENTER_LEFT);
+        Label header = new Label("Learning Progress");
+        header.getStyleClass().add("panel-header");
+        
+        double progress = moduleTotal > 0 ? (double) modulesCompleted / moduleTotal : 0;
+        ProgressBar progressBar = new ProgressBar(progress);
+        progressBar.setMaxWidth(Double.MAX_VALUE);
+        progressBar.getStyleClass().add("learning-progress-bar");
 
-        ProgressBar progressBar = new ProgressBar((double) modulesCompleted / moduleTotal);
-        progressBar.setPrefHeight(12);
-        progressBar.setPrefWidth(520);
-        progressBar.setStyle("-fx-accent: #000000;");
+        Label progressLabel = new Label(Math.round(progress * 100) + "% Completion");
+        progressLabel.getStyleClass().add("progress-text");
 
-        HBox stats = new HBox(12,
-                createDashboardStat("Quizzes Taken", String.valueOf(quizzesTaken), null),
-                createDashboardStat("Average Score", averageScore + "%", null),
-                createDashboardStat("Best Score", bestScore + "%", null)
+        HBox stats = new HBox(0,
+                createStatItem("Quizzes", String.valueOf(quizzesTaken)),
+                createVerticalSeparator(),
+                createStatItem("Avg Score", averageScore + "%"),
+                createVerticalSeparator(),
+                createStatItem("Best Score", bestScore + "%")
         );
         stats.setAlignment(Pos.CENTER);
-
-        VBox content = new VBox(12, header, progressBar, stats);
-        return new Panel("Learning Progress", content);
+        
+        VBox content = new VBox(16, header, progressBar, progressLabel, stats);
+        content.setPadding(new Insets(20));
+        content.getStyleClass().add("dashboard-card");
+        return content; // Returning VBox to use directly in HBox layout
     }
 
-    private Panel buildWalletSummary(DataRepository repository, User user) {
+    private VBox buildWalletSummary(DataRepository repository, User user) {
         List<WalletEntry> entries = repository.loadWallet(user);
         double income = repository.calculateIncome(entries);
         double expenses = repository.calculateExpenses(entries);
-        double goal = 5000;
-        double savings = entries.stream()
-                .filter(e -> e.getType() == WalletEntryType.SAVINGS)
-                .mapToDouble(WalletEntry::getAmount)
-                .sum();
-        double progress = Math.min(1, savings / goal);
+        double currentBalance = income - expenses;
+        
+        Label header = new Label("Wallet Overview");
+        header.getStyleClass().add("panel-header");
 
-        Label progressTitle = new Label("Savings Goal Progress");
-        progressTitle.setStyle("-fx-font-weight: 600; -fx-text-fill: #2a2a2a;");
-        Label progressValue = new Label("₹" + Math.round(savings) + " / ₹" + Math.round(goal));
-        progressValue.setStyle("-fx-font-weight: 700;");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox progressHeader = new HBox(8, progressTitle, spacer, progressValue);
-        progressHeader.setAlignment(Pos.CENTER_LEFT);
+        Label balanceLabel = new Label("₹" + Math.round(currentBalance));
+        balanceLabel.getStyleClass().add("balance-value");
+        Label balanceTitle = new Label("Current Balance");
+        balanceTitle.getStyleClass().add("balance-title");
+        
+        VBox balanceBox = new VBox(4, balanceTitle, balanceLabel);
+        balanceBox.setAlignment(Pos.CENTER);
+        balanceBox.setPadding(new Insets(0, 0, 12, 0));
 
-        ProgressBar savingsBar = new ProgressBar(progress);
-        savingsBar.setPrefHeight(12);
-        savingsBar.setStyle("-fx-accent: #000000;");
-
-        HBox stats = new HBox(12,
-                createDashboardStat("Monthly Income", "₹" + Math.round(income), "Income recorded"),
-                createDashboardStat("Monthly Expenses", "₹" + Math.round(expenses), "Expenses recorded")
+        HBox stats = new HBox(0,
+                createStatItem("Income", "₹" + Math.round(income)),
+                createVerticalSeparator(),
+                createStatItem("Expenses", "₹" + Math.round(expenses))
         );
         stats.setAlignment(Pos.CENTER);
-
-        VBox content = new VBox(14, progressHeader, savingsBar, stats);
-        Panel panel = new Panel("Wallet Summary", content);
-        panel.getStyleClass().add("wallet-panel");
-        return panel;
+        
+        VBox content = new VBox(12, header, balanceBox, stats);
+        content.setPadding(new Insets(20));
+        content.getStyleClass().add("dashboard-card");
+        return content;
     }
 
     private Panel buildBookmarkedJobs(List<JobOpportunity> jobs) {
         if (jobs.isEmpty()) {
-            return new Panel("Bookmarked Opportunities", new Label("No jobs available right now."));
+            VBox emptyBox = new VBox(new Label("No recent opportunities. Check the Work tab!"));
+            emptyBox.setPadding(new Insets(24));
+            emptyBox.getStyleClass().add("dashboard-card");
+            return new Panel("Recent Opportunities", emptyBox);
         }
-        int previewSize = Math.min(jobs.size(), 3);
-        List<JobOpportunity> preview = jobs.subList(0, previewSize);
-
-        VBox box = new VBox(12);
-        preview.forEach(job -> {
-            Label title = new Label(job.getTitle());
-            title.setStyle("-fx-font-weight: 700; -fx-font-size: 15px;");
-            Label meta = new Label(job.getLocation() + " • " + job.getCategory());
-            meta.getStyleClass().add("bookmark-details-meta");
-            Label hours = new Label(job.getHours());
-            hours.getStyleClass().add("bookmark-details-meta");
-
-            VBox details = new VBox(2, title, meta, hours);
-            details.setAlignment(Pos.CENTER_LEFT);
-
-            Button applyBtn = new Button("Apply");
-            applyBtn.getStyleClass().add("primary-button");
-            Button removeBtn = new Button("Remove");
-            removeBtn.getStyleClass().add("outline-button");
-            HBox actions = new HBox(8, applyBtn, removeBtn);
-            actions.setAlignment(Pos.CENTER_RIGHT);
-
-            HBox row = new HBox(24, details, actions);
-            row.setAlignment(Pos.CENTER_LEFT);
-            HBox.setHgrow(details, Priority.ALWAYS);
-            row.getStyleClass().add("bookmark-card");
-            box.getChildren().add(row);
+        
+        VBox list = new VBox(16);
+        jobs.stream().limit(3).forEach(job -> {
+             HBox row = new HBox(16);
+             row.setAlignment(Pos.CENTER_LEFT);
+             
+             VBox info = new VBox(4);
+             Label title = new Label(job.getTitle());
+             title.getStyleClass().add("job-title");
+             Label meta = new Label(job.getLocation() + " • " + job.getCategory());
+             meta.getStyleClass().add("job-meta");
+             info.getChildren().addAll(title, meta);
+             
+             Region spacer = new Region();
+             HBox.setHgrow(spacer, Priority.ALWAYS);
+             
+             Button apply = new Button("View");
+             apply.getStyleClass().add("small-button");
+             
+             row.getChildren().addAll(info, spacer, apply);
+             list.getChildren().add(row);
         });
-        return new Panel("Bookmarked Opportunities", box);
+        
+        VBox content = new VBox(16, list);
+        content.setPadding(new Insets(20));
+        Panel panel = new Panel("Bookmarked Opportunities", content);
+        panel.getStyleClass().add("dashboard-card");
+        // Remove default panel header style if wrapper handles it, but Panel class adds it.
+        // We might want to customize, but standard Panel is fine for now.
+        return panel;
     }
 
     private VBox createHeroMetric(String title, String value, String subtitle) {
-        Label label = new Label(title);
-        label.getStyleClass().add("hero-metric-label");
-        Label valueLabel = new Label(value);
-        valueLabel.getStyleClass().add("hero-metric-value");
+        Label val = new Label(value);
+        val.getStyleClass().add("hero-stat-value");
+        Label tit = new Label(title);
+        tit.getStyleClass().add("hero-stat-title");
         Label sub = new Label(subtitle);
-        sub.getStyleClass().add("hero-metric-subtitle");
-        VBox box = new VBox(4, label, valueLabel, sub);
-        box.getStyleClass().add("hero-metric-card");
+        sub.getStyleClass().add("hero-stat-sub");
+        
+        VBox box = new VBox(2, val, tit, sub);
+        box.setAlignment(Pos.CENTER_LEFT);
         return box;
     }
 
-    private VBox createDashboardStat(String title, String value, String helper) {
-        Label titleLabel = new Label(title);
-        titleLabel.getStyleClass().add("dashboard-stat-title");
-        Label valueLabel = new Label(value);
-        valueLabel.getStyleClass().add("dashboard-stat-value");
-        VBox box = new VBox(3, titleLabel, valueLabel);
-        if (helper != null) {
-            Label helperLabel = new Label(helper);
-            helperLabel.getStyleClass().add("dashboard-stat-helper");
-            box.getChildren().add(helperLabel);
-        }
-        box.getStyleClass().add("dashboard-stat-card");
+    private VBox createStatItem(String label, String value) {
+        Label val = new Label(value);
+        val.getStyleClass().add("stat-item-value");
+        Label lb = new Label(label);
+        lb.getStyleClass().add("stat-item-label");
+        VBox box = new VBox(4, val, lb);
+        box.setAlignment(Pos.CENTER);
+        box.setPrefWidth(100);
         return box;
+    }
+
+    private Region createVerticalSeparator() {
+        Region sep = new Region();
+        sep.setPrefWidth(1);
+        sep.setPrefHeight(32);
+        sep.setStyle("-fx-background-color: #eee;");
+        return sep;
     }
 
     private String determineBadge(int modulesCompleted) {
-        if (modulesCompleted >= 10) {
-            return "Silver Scholar";
-        }
-        if (modulesCompleted >= 7) {
-            return "Bronze Scholar";
-        }
+        if (modulesCompleted >= 10) return "Silver Scholar";
+        if (modulesCompleted >= 7) return "Bronze Scholar";
         return "Rising Learner";
+    }
+
+    private String getTimeOfDay() {
+        int hour = java.time.LocalTime.now().getHour();
+        if (hour < 12) return "Morning";
+        if (hour < 17) return "Afternoon";
+        return "Evening";
     }
 }

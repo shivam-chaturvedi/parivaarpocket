@@ -110,15 +110,16 @@ public class LoginView {
         switchButton.setText("New here? Create account");
 
         ProgressIndicator loader = new ProgressIndicator();
-        loader.setPrefSize(32, 32);
+        loader.setPrefSize(24, 24);
         loader.setVisible(false);
-        loader.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
         loader.getStyleClass().add("login-loader");
+        
         HBox loaderRow = new HBox(loader);
         loaderRow.setAlignment(Pos.CENTER);
-        loaderRow.setPadding(new Insets(4, 0, 0, 0));
+        loaderRow.setPadding(new Insets(10, 0, 0, 0));
         loaderRow.setVisible(false);
         loaderRow.setManaged(false);
+
         Consumer<Boolean> toggleLoading = isLoading -> {
             submitButton.setDisable(isLoading);
             switchButton.setDisable(isLoading);
@@ -126,29 +127,36 @@ public class LoginView {
             educatorBtn.setDisable(isLoading);
             emailField.setDisable(isLoading);
             passwordField.setDisable(isLoading);
+            
+            errorLabel.setVisible(false);
+            loader.setVisible(isLoading);
             loaderRow.setVisible(isLoading);
             loaderRow.setManaged(isLoading);
         };
 
-        submitButton.setOnAction(e -> {
+        Runnable doLogin = () -> {
             errorLabel.setVisible(false);
             toggleLoading.accept(true);
-            String email = emailField.getText();
+            String email = emailField.getText().trim();
             String password = passwordField.getText();
             boolean targetRegistering = registering;
+            
             Task<User> authTask = new Task<>() {
                 @Override
-                protected User call() {
+                protected User call() throws Exception {
+                    // Simulate network delay for "buffering" effect if local
                     if (targetRegistering) {
                         return authService.register(email, password, (UserRole) roleGroup.getSelectedToggle().getUserData());
                     }
                     return authService.login(email, password);
                 }
             };
+
             authTask.setOnSucceeded(event -> {
                 toggleLoading.accept(false);
                 onLogin.accept(authTask.getValue());
             });
+
             authTask.setOnFailed(event -> {
                 toggleLoading.accept(false);
                 Throwable cause = authTask.getException();
@@ -157,8 +165,14 @@ public class LoginView {
                 errorLabel.setVisible(true);
                 showAlert(message);
             });
+
             new Thread(authTask).start();
-        });
+        };
+
+        submitButton.setOnAction(e -> doLogin.run());
+        
+        emailField.setOnAction(e -> doLogin.run());
+        passwordField.setOnAction(e -> doLogin.run());
 
         GridPane grid = new GridPane();
         grid.setHgap(10);

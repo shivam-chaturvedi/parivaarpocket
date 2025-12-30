@@ -7,7 +7,9 @@ import com.athena.parivarpocket.model.UserRole;
 import com.athena.parivarpocket.service.OfflineSyncService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -18,6 +20,7 @@ import javafx.scene.layout.VBox;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public class SidebarView extends VBox {
@@ -53,10 +56,14 @@ public class SidebarView extends VBox {
         buttons.setFillWidth(true);
 
         Map<MainTab, String> tabLabels = new LinkedHashMap<>();
-        tabLabels.put(MainTab.LEARNING, "Learning");
-        tabLabels.put(MainTab.WORK, "Work");
+        if (user.getRole() == UserRole.STUDENT) {
+            tabLabels.put(MainTab.LEARNING, "Learning");
+            tabLabels.put(MainTab.WORK, "Work");
+        }
         tabLabels.put(MainTab.WALLET, "Wallet");
-        tabLabels.put(MainTab.NOTIFICATIONS, "Alerts");
+        if (user.getRole() == UserRole.EDUCATOR) {
+            tabLabels.put(MainTab.NOTIFICATIONS, "Alerts");
+        }
 
         tabLabels.forEach((tab, label) -> buttons.getChildren().add(createTabButton(tab, label, activeTab, onTabSelected)));
         getChildren().add(buttons);
@@ -65,7 +72,7 @@ public class SidebarView extends VBox {
         VBox.setVgrow(spacer, Priority.ALWAYS);
         getChildren().add(spacer);
 
-        Button logoutBtn = createSidebarAction("logout.png", "Logout", onLogout);
+        Button logoutBtn = createSidebarAction("logout.png", "Logout", () -> promptLogout(onLogout));
         Label roleLabel = new Label(user.getRole() == UserRole.STUDENT ? "Student Profile" : "Educator Profile");
         roleLabel.getStyleClass().add("sidebar-role");
         int pending = offlineSyncService.getPendingOperations().size();
@@ -101,6 +108,19 @@ public class SidebarView extends VBox {
         }
         button.setOnAction(e -> onTabSelected.accept(tab));
         return button;
+    }
+
+    private void promptLogout(Runnable onLogout) {
+        Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmation.setTitle("Confirm Logout");
+        confirmation.setHeaderText("Log out?");
+        confirmation.setContentText("Are you sure you want to end your session?");
+        ButtonType logoutButton = new ButtonType("Logout");
+        confirmation.getButtonTypes().setAll(logoutButton, ButtonType.CANCEL);
+        Optional<ButtonType> chosen = confirmation.showAndWait();
+        if (chosen.isPresent() && chosen.get() == logoutButton) {
+            onLogout.run();
+        }
     }
 
     private Button createSidebarAction(String iconName, String labelText, Runnable action) {

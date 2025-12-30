@@ -3,7 +3,6 @@ package com.athena.parivarpocket.ui;
 import com.athena.parivarpocket.model.MainTab;
 import com.athena.parivarpocket.model.User;
 import com.athena.parivarpocket.model.UserRole;
-import com.athena.parivarpocket.service.BudgetOptimizer;
 import com.athena.parivarpocket.service.DataRepository;
 import com.athena.parivarpocket.service.OfflineSyncService;
 import com.athena.parivarpocket.service.ReportService;
@@ -22,7 +21,6 @@ public class MainLayout {
     private final BorderPane root = new BorderPane();
     private final User user;
     private final DataRepository repository;
-    private final BudgetOptimizer optimizer;
     private final OfflineSyncService offlineSyncService;
     private final ReportService reportService;
     private MainTab activeTab = MainTab.DASHBOARD;
@@ -33,13 +31,11 @@ public class MainLayout {
 
     public MainLayout(User user,
                       DataRepository repository,
-                      BudgetOptimizer optimizer,
                       OfflineSyncService offlineSyncService,
                       ReportService reportService,
                       Runnable onLogout) {
         this.user = user;
         this.repository = repository;
-        this.optimizer = optimizer;
         this.offlineSyncService = offlineSyncService;
         this.reportService = reportService;
         this.onLogout = onLogout;
@@ -109,7 +105,7 @@ public class MainLayout {
                     : new EducatorDashboardView(repository, reportService);
             case LEARNING -> new LearningModuleView(repository);
             case WORK -> new WorkModuleView(repository);
-            case WALLET -> new WalletModuleView(repository, user, optimizer, offlineSyncService);
+            case WALLET -> new WalletModuleView(repository, user, offlineSyncService);
             case NOTIFICATIONS -> new NotificationsView(repository.getNotifications(user), offlineSyncService);
         };
     }

@@ -3,6 +3,7 @@ package com.athena.parivarpocket.model;
 import java.util.List;
 
 public class JobOpportunity {
+    private final String id;
     private final String title;
     private final String company;
     private final String location;
@@ -15,8 +16,9 @@ public class JobOpportunity {
     private final String jobUrl;
     private final int suitabilityScore;
 
-    public JobOpportunity(String title, String company, String location, String category, String hours, String payRange,
+    public JobOpportunity(String id, String title, String company, String location, String category, String hours, String payRange,
                           List<String> requiredSkills, String safetyNotes, String contact, String jobUrl, int suitabilityScore) {
+        this.id = id;
         this.title = title;
         this.company = company;
         this.location = location;
@@ -28,6 +30,10 @@ public class JobOpportunity {
         this.contact = contact;
         this.jobUrl = jobUrl;
         this.suitabilityScore = suitabilityScore;
+    }
+
+    public String getId() {
+        return id;
     }
 
     public String getTitle() {

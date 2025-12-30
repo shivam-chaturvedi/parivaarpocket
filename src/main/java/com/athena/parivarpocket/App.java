@@ -14,7 +14,6 @@ public class App extends Application {
     private final LocalStoreService localStoreService = new LocalStoreService();
     private final DataRepository repository = new DataRepository(localStoreService);
     private final OfflineSyncService offlineSyncService = new OfflineSyncService();
-    private final BudgetOptimizer budgetOptimizer = new BudgetOptimizer(repository);
     private final ReportService reportService = new ReportService();
     private StackPane root;
 
@@ -40,7 +39,6 @@ public class App extends Application {
         MainLayout layout = new MainLayout(
                 user,
                 repository,
-                budgetOptimizer,
                 offlineSyncService,
                 reportService,
                 this::showLogin);

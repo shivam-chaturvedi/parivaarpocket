@@ -1142,3 +1142,604 @@
     -fx-text-fill: #343434;
     -fx-wrap-text: true;
 }
+
+/* --- Enhanced Wallet UI --- */
+
+.wallet-container {
+    -fx-background-color: #f7f9fa;
+}
+
+.wallet-card {
+    -fx-background-color: #ffffff;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.05), 10, 0, 0, 2);
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-border-color: #eee;
+    -fx-border-width: 1;
+}
+
+.wallet-card .panel-header {
+    -fx-background-color: white;
+    -fx-font-size: 16px;
+    -fx-padding: 16 20 8 20;
+    -fx-border-width: 0;
+    -fx-font-weight: 700;
+    -fx-text-fill: #111;
+}
+
+/* Metrics */
+.metric-title {
+    -fx-font-size: 12px;
+    -fx-text-fill: #888;
+    -fx-font-weight: 600;
+    -fx-text-transform: uppercase;
+    -fx-letter-spacing: 0.5;
+}
+
+.metric-value {
+    -fx-font-size: 28px;
+    -fx-font-weight: 900;
+}
+
+.metric-income { -fx-text-fill: #111; }
+.metric-expense { -fx-text-fill: #111; }
+.metric-savings { -fx-text-fill: #009444; }
+
+/* Modern Inputs */
+.modern-input {
+    -fx-background-color: #f5f7f9;
+    -fx-border-color: transparent;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 10 14;
+    -fx-prompt-text-fill: #999;
+    -fx-font-size: 14px;
+}
+.modern-input:focused {
+    -fx-background-color: white;
+    -fx-border-color: #222;
+}
+
+.modern-choice {
+    -fx-background-color: #f5f7f9;
+    -fx-border-color: transparent;
+    -fx-background-radius: 8;
+}
+
+.modern-choice-sm {
+    -fx-background-color: #fff;
+    -fx-border-color: #ddd;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-padding: 2 6;
+    -fx-font-size: 12px;
+}
+
+/* Buttons */
+.secondary-button {
+    -fx-background-color: white;
+    -fx-text-fill: #111;
+    -fx-border-color: #ddd;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 8 16;
+    -fx-font-weight: 700;
+}
+.secondary-button:hover {
+    -fx-background-color: #f9f9f9;
+    -fx-border-color: #ccc;
+}
+
+.primary-button-lg {
+    -fx-background-color: #111;
+    -fx-text-fill: white;
+    -fx-font-weight: 700;
+    -fx-font-size: 15px;
+    -fx-padding: 12 24;
+    -fx-background-radius: 8;
+    -fx-cursor: hand;
+}
+.primary-button-lg:hover {
+    -fx-background-color: #333;
+}
+
+/* Transaction History */
+.timeline-header {
+    -fx-padding: 0 0 12 0;
+    -fx-border-color: #eee;
+    -fx-border-width: 0 0 1 0;
+}
+
+.transaction-row {
+    -fx-background-color: #fff;
+    -fx-border-color: transparent;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+.transaction-row:hover {
+    -fx-background-color: #f8f9fa;
+}
+
+.date-badge {
+    -fx-background-color: #f0f2f5;
+    -fx-background-radius: 6;
+    -fx-text-fill: #555;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-padding: 4;
+    -fx-alignment: center;
+}
+
+.trans-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #222;
+}
+
+.trans-subtitle {
+    -fx-font-size: 12px;
+    -fx-text-fill: #777;
+}
+
+.trans-amount {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+}
+.amount-neg { -fx-text-fill: #111; }
+.amount-pos { -fx-text-fill: #009444; }
+
+.legend-label { -fx-text-fill: #555; -fx-font-size: 12px; }
+.legend-value { -fx-text-fill: #111; -fx-font-weight: 700; -fx-font-size: 12px; }
+
+.alert-danger {
+    -fx-text-fill: #e02424;
+    -fx-font-weight: 700;
+}
+/* --- Enhanced Home Page (Dashboard) --- */
+
+.dashboard-container {
+    -fx-background-color: #020202;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 30, 0, 0, 10);
+    -fx-padding: 24;
+}
+
+.hero-banner {
+    -fx-background-color: linear-gradient(to right, #2c3e50, #4ca1af);
+    -fx-background-radius: 16;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 15, 0, 0, 4);
+}
+
+.hero-greeting {
+    -fx-font-size: 28px;
+    -fx-font-weight: 800;
+    -fx-text-fill: white;
+}
+
+.hero-subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: rgba(255, 255, 255, 0.9);
+}
+
+.hero-stat-value {
+    -fx-font-size: 24px;
+    -fx-font-weight: 900;
+    -fx-text-fill: #fff;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.2), 5, 0, 0, 1);
+}
+
+.hero-stat-title {
+    -fx-font-size: 11px;
+    -fx-text-fill: rgba(255, 255, 255, 0.8);
+    -fx-text-transform: uppercase;
+    -fx-letter-spacing: 0.5;
+}
+
+.hero-stat-sub {
+    -fx-font-size: 11px;
+    -fx-text-fill: rgba(255, 255, 255, 0.6);
+    -fx-font-style: italic;
+}
+
+.dashboard-card {
+    -fx-background-color: white;
+    -fx-background-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.05), 8, 0, 0, 2);
+    -fx-border-color: #eee;
+    -fx-border-radius: 12;
+    -fx-border-width: 1;
+}
+
+.learning-progress-bar .bar {
+    -fx-background-color: #4ca1af;
+    -fx-background-radius: 4;
+}
+
+.learning-progress-bar .track {
+    -fx-background-color: #f0f2f5;
+    -fx-background-radius: 4;
+}
+
+.progress-text {
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #4ca1af;
+}
+
+.stat-item-label {
+    -fx-font-size: 11px;
+    -fx-text-fill: #888;
+    -fx-font-weight: 600;
+}
+
+.stat-item-value {
+    -fx-font-size: 16px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #333;
+}
+
+.balance-title {
+    -fx-font-size: 12px;
+    -fx-text-fill: #666;
+}
+
+.balance-value {
+    -fx-font-size: 32px;
+    -fx-font-weight: 900;
+    -fx-text-fill: #111;
+}
+
+.job-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #222;
+}
+
+.job-meta {
+    -fx-font-size: 12px;
+    -fx-text-fill: #777;
+}
+
+.small-button {
+    -fx-background-color: #f0f2f5;
+    -fx-text-fill: #333;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-padding: 6 12;
+    -fx-background-radius: 6;
+}
+
+.small-button:hover {
+    -fx-background-color: #e4e6eb;
+}/* Educator Dashboard Modern Styles */
+
+.bg-blue-gradient {
+    -fx-background-color: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
+}
+
+.bg-green-gradient {
+    -fx-background-color: linear-gradient(to right, #43e97b 0%, #38f9d7 100%);
+}
+
+.bg-red-gradient {
+    -fx-background-color: linear-gradient(to right, #fa709a 0%, #fee140 100%);
+}
+
+.bg-purple-gradient {
+    -fx-background-color: linear-gradient(to right, #667eea 0%, #764ba2 100%);
+}
+
+.hero-stat-card {
+    -fx-background-radius: 12;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.1), 10, 0, 0, 4);
+}
+
+.hero-stat-value {
+    -fx-text-fill: white;
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+}
+
+.hero-stat-title {
+    -fx-text-fill: rgba(255, 255, 255, 0.9);
+    -fx-font-size: 14px;
+}
+
+.modern-search-bar {
+    -fx-background-color: rgba(255, 255, 255, 0.12);
+    -fx-border-color: rgba(255, 255, 255, 0.35);
+    -fx-border-radius: 20;
+    -fx-background-radius: 20;
+    -fx-padding: 10 18;
+    -fx-text-fill: #ffffff;
+    -fx-prompt-text-fill: rgba(255, 255, 255, 0.6);
+}
+
+.modern-combo {
+    -fx-background-color: white;
+    -fx-background-radius: 20;
+    -fx-border-color: #e0e0e0;
+    -fx-border-radius: 20;
+    -fx-padding: 8 12;
+}
+
+/* --- Educator Dashboard Palette --- */
+
+.dashboard-title {
+    -fx-font-size: 32px;
+    -fx-font-weight: 900;
+    -fx-text-fill: #ffffff;
+}
+
+.dashboard-subtitle {
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-letter-spacing: 0.2;
+    -fx-text-fill: rgba(255, 255, 255, 0.75);
+}
+
+.section-container {
+    -fx-background-color: rgba(15, 23, 42, 0.85);
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(255, 255, 255, 0.08);
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 15, 0, 0, 8);
+}
+
+.section-header {
+    -fx-font-size: 20px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #ffffff;
+}
+
+.bw-chart {
+    -fx-background-color: rgba(255, 255, 255, 0.04);
+    -fx-border-color: rgba(255, 255, 255, 0.15);
+    -fx-border-width: 1;
+    -fx-background-radius: 16;
+    -fx-border-radius: 16;
+}
+
+.chart-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #ffffff;
+    -fx-letter-spacing: 0.1;
+}
+
+.stat-card-bw {
+    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-background-radius: 16;
+    -fx-border-radius: 16;
+    -fx-alignment: center;
+    -fx-padding: 18;
+    -fx-min-width: 150;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 10, 0, 0, 6);
+}
+
+.stat-value-bw {
+    -fx-font-size: 26px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #ffffff;
+}
+
+.stat-title-bw {
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-text-fill: rgba(255, 255, 255, 0.8);
+    -fx-letter-spacing: 0.3;
+}
+
+.icon-button-bw {
+    -fx-background-color: rgba(255, 255, 255, 0.12);
+    -fx-border-color: rgba(255, 255, 255, 0.25);
+    -fx-border-radius: 14;
+    -fx-background-radius: 14;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 18px;
+    -fx-pref-width: 48;
+    -fx-pref-height: 48;
+}
+
+.action-button-bw {
+    -fx-background-color: linear-gradient(to bottom, #111827, #0b1221);
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: 700;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 10 18;
+    -fx-border-color: transparent;
+}
+
+.action-button-bw:hover {
+    -fx-background-color: linear-gradient(to bottom, #1e2135, #111827);
+}
+
+.bw-table {
+    -fx-background-color: #ffffff;
+    -fx-border-color: rgba(0, 0, 0, 0.08);
+    -fx-border-width: 1;
+    -fx-border-radius: 16;
+    -fx-background-radius: 16;
+    -fx-table-cell-border-color: transparent;
+    -fx-selection-bar: #e0e7ff;
+    -fx-selection-bar-non-focused: #e0e7ff;
+}
+
+.bw-table .column-header-background {
+    -fx-background-color: #f7f9fb;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.bw-table .column-header, .bw-table .table-cell {
+    -fx-text-fill: #111827;
+    -fx-font-size: 13px;
+    -fx-border-color: transparent;
+}
+
+.bw-table .column-header {
+    -fx-font-weight: 700;
+}
+
+.cell-name-bw {
+    -fx-font-size: 15px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #111827;
+}
+
+.cell-subtext-bw {
+    -fx-font-size: 11px;
+    -fx-text-fill: rgba(17, 24, 39, 0.6);
+}
+
+.cell-text-bw {
+    -fx-font-size: 13px;
+    -fx-text-fill: #111827;
+}
+
+.cell-highlight-bw {
+    -fx-font-size: 16px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #0b7d5d;
+}
+
+.bw-progress-bar {
+    -fx-accent: #0b7d5d;
+}
+
+.bw-progress-bar .track {
+    -fx-background-color: rgba(15, 23, 42, 0.08);
+}
+
+.bw-badge {
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-padding: 4 12;
+    -fx-background-radius: 999;
+    -fx-text-fill: #ffffff;
+}
+
+.bw-badge-excellent {
+    -fx-background-color: #0b7d5d;
+}
+
+.bw-badge-good {
+    -fx-background-color: #2563eb;
+}
+
+.bw-badge-needs-attention {
+    -fx-background-color: #c2410c;
+}
+
+.bw-dialog .dialog-pane {
+    -fx-background-color: #0f172a;
+    -fx-border-radius: 20;
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(255, 255, 255, 0.08);
+    -fx-border-width: 1;
+}
+
+.bw-tabs .tab-header-area {
+    -fx-background-color: transparent;
+}
+
+.bw-tabs .tab {
+    -fx-text-fill: rgba(255, 255, 255, 0.75);
+}
+
+.bw-tabs .tab:selected {
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: 700;
+}
+
+.student-card {
+    -fx-background-color: white;
+    -fx-background-radius: 12;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.05), 8, 0, 0, 2);
+    -fx-border-color: #f0f0f0;
+    -fx-border-radius: 12;
+}
+
+.student-avatar {
+    -fx-background-color: #e3f2fd;
+    -fx-text-fill: #1976d2;
+    -fx-font-weight: bold;
+    -fx-font-size: 18px;
+    -fx-min-width: 40px;
+    -fx-min-height: 40px;
+    -fx-max-width: 40px;
+    -fx-max-height: 40px;
+    -fx-alignment: center;
+    -fx-background-radius: 20;
+}
+
+.card-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #333;
+}
+
+.status-badge {
+    -fx-padding: 2 8;
+    -fx-background-radius: 10;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.badge-green {
+    -fx-background-color: #e8f5e9;
+    -fx-text-fill: #2e7d32;
+}
+
+.badge-blue {
+    -fx-background-color: #e3f2fd;
+    -fx-text-fill: #1565c0;
+}
+
+.badge-yellow {
+    -fx-background-color: #fff8e1;
+    -fx-text-fill: #f9a825;
+}
+
+.badge-red {
+    -fx-background-color: #ffebee;
+    -fx-text-fill: #c62828;
+}
+
+.metric-label-sm {
+    -fx-text-fill: #757575;
+    -fx-font-size: 11px;
+}
+
+.metric-value-sm {
+    -fx-text-fill: #333;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.placeholder-text {
+    -fx-text-fill: #999;
+    -fx-font-size: 14px;
+    -fx-padding: 20;
+}
+
+.job-history-card {
+    -fx-background-color: #f9fafb;
+    -fx-background-radius: 8;
+    -fx-border-color: #e5e7eb;
+    -fx-border-radius: 8;
+}
+
+.job-title-sm {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+.job-date-sm {
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 11px;
+}
+
+.modern-dialog>.dialog-pane {
+    -fx-background-color: white;
+}

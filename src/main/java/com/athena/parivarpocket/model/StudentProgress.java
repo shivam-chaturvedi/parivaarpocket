@@ -2,6 +2,7 @@ package com.athena.parivarpocket.model;
 
 public class StudentProgress {
     private final String studentName;
+    private final String userEmail;
     private final int modulesCompleted;
     private final int totalModules;
     private final int quizzesTaken;
@@ -14,6 +15,7 @@ public class StudentProgress {
     private final int alerts;
 
     public StudentProgress(String studentName,
+                           String userEmail,
                            int modulesCompleted,
                            int totalModules,
                            int quizzesTaken,
@@ -25,6 +27,7 @@ public class StudentProgress {
                            int walletSavings,
                            int alerts) {
         this.studentName = studentName;
+        this.userEmail = userEmail;
         this.modulesCompleted = modulesCompleted;
         this.totalModules = totalModules;
         this.quizzesTaken = quizzesTaken;
@@ -39,6 +42,10 @@ public class StudentProgress {
 
     public String getStudentName() {
         return studentName;
+    }
+
+    public String getUserEmail() {
+        return userEmail;
     }
 
     public int getModulesCompleted() {
