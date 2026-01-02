@@ -209,6 +209,16 @@ public class LearningModuleView extends VBox {
         if (courseUrl == null || courseUrl.isBlank() || !Desktop.isDesktopSupported()) {
             return;
         }
+
+        // Log course view activity
+        User user = repository.getCurrentUser();
+        if (user != null) {
+            JsonObject activityData = new JsonObject();
+            activityData.addProperty("course_url", courseUrl);
+            activityData.addProperty("source", "learning_module");
+            repository.logStudentActivity(user, "course_view", activityData);
+        }
+
         try {
             Desktop.getDesktop().browse(new URI(courseUrl));
         } catch (IOException | URISyntaxException e) {

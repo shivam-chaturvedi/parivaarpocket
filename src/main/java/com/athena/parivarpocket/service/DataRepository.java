@@ -362,6 +362,13 @@ public class DataRepository {
         if (inserted != null && !inserted.isEmpty()) {
             BudgetGoal goal = toBudgetGoal(inserted.get(0).getAsJsonObject());
             cacheBudgetGoal(goal);
+
+            // Log budget goal update activity
+            JsonObject activityData = new JsonObject();
+            activityData.addProperty("current_budget", currentBudget);
+            activityData.addProperty("target_savings", targetSavings);
+            logStudentActivity(user, "budget_goal_update", activityData);
+
             return goal;
         }
         return null;
@@ -404,6 +411,14 @@ public class DataRepository {
         entries.add(0, entry); 
         walletEntries.put(keyForUser(user), entries);
         storeService.saveWalletEntries(user, entries);
+
+        // Log wallet transaction activity
+        JsonObject activityData = new JsonObject();
+        activityData.addProperty("type", entry.getType().toString());
+        activityData.addProperty("category", entry.getCategory());
+        activityData.addProperty("amount", entry.getAmount());
+        activityData.addProperty("note", entry.getNote());
+        logStudentActivity(user, "wallet_transaction", activityData);
     }
 
     public void saveWallet(User user, List<WalletEntry> entries) {
@@ -1095,15 +1110,41 @@ public class DataRepository {
     }
 
 
-    public void applyForJob(User user, JobOpportunity job) {
+    public void recordJobApplication(User user, JobOpportunity job) {
         if (user == null || job == null) {
             return;
         }
-        JsonObject payload = new JsonObject();
-        payload.addProperty("job_id", job.getId());
-        payload.addProperty("user_email", user.getEmail().toLowerCase(Locale.ROOT));
-        payload.addProperty("status", "Pending");
-        supabaseClient.insertRecord("job_applications", null, payload, user.getAccessToken());
+        
+        // 1. Record the application activity in the consolidated logs
+        JsonObject activityData = new JsonObject();
+        activityData.addProperty("job_id", job.getId());
+        activityData.addProperty("job_title", job.getTitle());
+        activityData.addProperty("company", job.getCompany());
+        activityData.addProperty("action", "application_submitted");
+        logStudentActivity(user, "job_application_event", activityData);
+
+        // 2. Increment employment applications in StudentProgress
+        StudentProgress progress = getStudentProgress(user.getEmail());
+        if (progress != null) {
+            StudentProgress updated = new StudentProgress(
+                    progress.getStudentName(),
+                    progress.getUserEmail(),
+                    progress.getModulesCompleted(),
+                    progress.getTotalModules(),
+                    progress.getQuizzesTaken(),
+                    progress.getAverageScore(),
+                    progress.getWalletHealthScore(),
+                    progress.getParivaarPoints(),
+                    progress.getEmploymentApplications() + 1,
+                    progress.getJobSaves(),
+                    progress.getWalletSavings(),
+                    progress.getAlerts()
+            );
+            updateStudentProgress(updated);
+        }
+
+        // 3. Award coins as incentive
+        awardParivaarPoints(user, 50, "Job Application: " + job.getTitle());
     }
 
     public void logStudentActivity(User user, String activityType, JsonObject activityData) {
@@ -1115,6 +1156,8 @@ public class DataRepository {
         payload.addProperty("activity_type", activityType);
         payload.add("activity_data", activityData != null ? activityData : new JsonObject());
         try {
+            // Using a simple insert; if we want it to be "instant" we could run it on the same thread 
+            // but the user wants it to be recorded *before* the external link opens.
             supabaseClient.insertRecord("student_activity_logs", null, payload, user.getAccessToken());
         } catch (Exception e) {
             System.err.println("[DataRepository] Unable to log student activity: " + e.getMessage());
@@ -1123,17 +1166,17 @@ public class DataRepository {
 
     public List<JobApplication> fetchJobApplications(String userEmail) {
         String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
-        String query = "user_email=eq." + encoded + "&order=applied_at.desc";
-        // We're doing a simple join manually since client doesn't support complex joins yet
-        return mapTable("job_applications", query, this::toJobApplication, currentUser.getAccessToken());
+        String query = "user_email=eq." + encoded + "&activity_type=eq.job_application_event&order=created_at.desc";
+        return mapTable("student_activity_logs", query, this::toJobApplicationFromLog, currentUser.getAccessToken());
     }
 
-    private JobApplication toJobApplication(JsonObject json) {
+    private JobApplication toJobApplicationFromLog(JsonObject json) {
+        JsonObject data = json.has("activity_data") ? json.getAsJsonObject("activity_data") : new JsonObject();
         return new JobApplication(
                 safeString(json, "id", ""),
-                safeString(json, "job_id", ""),
-                safeString(json, "status", "Pending"),
-                safeDateTime(json, "applied_at", LocalDateTime.now())
+                safeString(data, "job_id", ""),
+                "Submitted", // Activity logs represent point-in-time events
+                safeDateTime(json, "created_at", LocalDateTime.now())
         );
     }
     public boolean updateStudentProgress(StudentProgress progress) {

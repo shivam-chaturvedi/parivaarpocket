@@ -463,7 +463,7 @@ public class WorkModuleView extends VBox {
         apply.setDisable(job.getId() == null || job.getId().isBlank());
         apply.setOnAction(e -> {
             handleJobApply(job);
-            openJobLink(job.getId());
+            openJobLink(job);
         });
 
         Button favBtn = new Button(isFav ? "❤" : "♡");
@@ -482,11 +482,25 @@ public class WorkModuleView extends VBox {
         return actions;
     }
 
-    private void openJobLink(String jobId) {
+    private void openJobLink(JobOpportunity job) {
+        if (job == null) return;
+        String jobId = job.getId();
         String jobUrl = buildViewJobUrl(jobId);
         if (jobUrl.isBlank() || !Desktop.isDesktopSupported()) {
             return;
         }
+
+        // Log view activity before opening the link
+        User currentUser = repository.getCurrentUser();
+        if (currentUser != null) {
+            JsonObject activityData = new JsonObject();
+            activityData.addProperty("job_id", jobId);
+            activityData.addProperty("job_title", job.getTitle());
+            activityData.addProperty("company", job.getCompany());
+            activityData.addProperty("source", "work_module");
+            repository.logStudentActivity(currentUser, "job_view", activityData);
+        }
+
         try {
             Desktop.getDesktop().browse(new URI(jobUrl));
         } catch (IOException | URISyntaxException ex) {
@@ -507,7 +521,8 @@ public class WorkModuleView extends VBox {
             return;
         }
         CompletableFuture.runAsync(() -> {
-            repository.applyForJob(currentUser, job);
+            repository.recordJobApplication(currentUser, job);
+            
             JsonObject activityData = new JsonObject();
             activityData.addProperty("job_id", job.getId());
             activityData.addProperty("job_title", job.getTitle());

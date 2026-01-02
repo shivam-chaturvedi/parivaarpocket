@@ -18,10 +18,14 @@ import java.awt.Desktop;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import com.google.gson.JsonObject;
 import java.util.List;
 
 public class StudentDashboardView extends VBox {
+    private final DataRepository repository;
+
     public StudentDashboardView(User user, DataRepository repository) {
+        this.repository = repository;
         setSpacing(24);
         setPadding(new Insets(24));
         getStyleClass().add("dashboard-container");
@@ -183,12 +187,23 @@ public class StudentDashboardView extends VBox {
              Button apply = new Button("View");
              apply.getStyleClass().add("small-button");
              apply.setOnAction(e -> {
-                 if (job.getJobLink() != null && !job.getJobLink().isBlank()) {
-                     try {
-                         Desktop.getDesktop().browse(new URI(job.getJobLink()));
-                     } catch (IOException | URISyntaxException ex) {
-                         ex.printStackTrace();
-                     }
+                 String indeedLink = "https://in.indeed.com/viewjob?jk=" + job.getId();
+                 
+                 // Log dashboard job view activity
+                 User currentUser = repository.getCurrentUser();
+                 if (currentUser != null) {
+                     JsonObject activityData = new JsonObject();
+                     activityData.addProperty("job_id", job.getId());
+                     activityData.addProperty("job_title", job.getTitle());
+                     activityData.addProperty("company", job.getCompany());
+                     activityData.addProperty("source", "dashboard");
+                     repository.logStudentActivity(currentUser, "job_view_from_dashboard", activityData);
+                 }
+
+                 try {
+                     Desktop.getDesktop().browse(new URI(indeedLink));
+                 } catch (IOException | URISyntaxException ex) {
+                     ex.printStackTrace();
                  }
              });
              

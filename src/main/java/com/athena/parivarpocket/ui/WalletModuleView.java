@@ -17,6 +17,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -271,6 +272,12 @@ public class WalletModuleView extends VBox {
         if (expenses >= income && income > 0) {
             budgetAlertLabel.setText("⚠️ Warning: Expenses exceed income.");
             budgetAlertLabel.getStyleClass().add("alert-danger");
+
+            // Log budget overflow activity
+            JsonObject activityData = new JsonObject();
+            activityData.addProperty("income", income);
+            activityData.addProperty("expenses", expenses);
+            repository.logStudentActivity(user, "budget_overflow", activityData);
         } else {
             double remaining = income - expenses;
             budgetAlertLabel.setText("You have ₹" + Math.round(remaining) + " remaining this month.");
@@ -299,6 +306,12 @@ public class WalletModuleView extends VBox {
             goalStatusLabel.setText("🎯 " + Math.round((currentSavings / target) * 100) + "% to savings goal (₹" + Math.round(delta) + " to go)");
         } else if (target > 0) {
             goalStatusLabel.setText("🎉 Savings goal reached!");
+            
+            // Log target reached activity
+            JsonObject activityData = new JsonObject();
+            activityData.addProperty("target", target);
+            activityData.addProperty("current_savings", currentSavings);
+            repository.logStudentActivity(user, "savings_goal_reached", activityData);
         }
     }
 
