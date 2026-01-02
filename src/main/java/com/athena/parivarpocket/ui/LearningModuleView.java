@@ -6,6 +6,7 @@ import com.athena.parivarpocket.model.QuizQuestion;
 import com.athena.parivarpocket.model.QuizAttempt;
 import com.athena.parivarpocket.model.User;
 import com.athena.parivarpocket.service.DataRepository;
+import com.google.gson.JsonObject;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.HPos;
@@ -331,14 +332,35 @@ public class LearningModuleView extends VBox {
                 totalMarks,
                 passed,
                 new ArrayList<>(responses));
+        
+        int pointsAwarded = 0;
         if (passed && attempt != null) {
             repository.saveLessonCompletion(user, lesson, attempt);
+            // Award a flat 100 ParivaarCoins for lesson completion
+            pointsAwarded = 100;
+            String reason = "Completed Lesson: " + lesson.getTitle();
+            repository.awardParivaarPoints(user, pointsAwarded, reason);
         }
-        String message = String.format("You scored %d / %d. %s",
+        
+        String pointMsg = pointsAwarded > 0 ? String.format(" and earned %d ParivaarCoins!", pointsAwarded) : ".";
+        String message = String.format("You scored %d / %d. %s%s",
                 score,
                 totalMarks,
-                passed ? "Module marked complete." : "Review the course material and try again.");
+                passed ? "Module marked complete" : "Review the course material and try again",
+                passed ? pointMsg : "");
         showFeedback(passed ? "Quiz passed" : "Quiz submitted", message);
+        JsonObject activityData = new JsonObject();
+        activityData.addProperty("lesson_id", lesson.getId());
+        activityData.addProperty("lesson_title", lesson.getTitle());
+        activityData.addProperty("quiz_id", quiz.getId());
+        activityData.addProperty("quiz_title", quiz.getTitle());
+        activityData.addProperty("score", score);
+        activityData.addProperty("max_score", totalMarks);
+        activityData.addProperty("passed", passed);
+        if (attempt != null) {
+            activityData.addProperty("quiz_attempt_id", attempt.getId());
+        }
+        repository.logStudentActivity(user, "quiz_attempt", activityData);
         refreshContent();
     }
 

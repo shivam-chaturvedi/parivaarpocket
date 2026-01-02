@@ -14,6 +14,10 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.layout.*;
 
+import java.awt.Desktop;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.List;
 
 public class StudentDashboardView extends VBox {
@@ -23,12 +27,16 @@ public class StudentDashboardView extends VBox {
         getStyleClass().add("dashboard-container");
 
         List<Lesson> lessons = repository.getLessons();
-        int modulesCompleted = (int) lessons.stream().filter(l -> l.getProgressPercent() >= 70).count();
-        List<QuizResult> quizResults = repository.getQuizResults();
-        int quizzesTaken = quizResults.size();
-        int averageScore = (int) Math.round(quizResults.stream().mapToInt(QuizResult::getScore).average().orElse(0));
-        int bestScore = quizResults.stream().mapToInt(QuizResult::getScore).max().orElse(0);
-        int coins = quizResults.stream().mapToInt(QuizResult::getCoinsAwarded).sum();
+        long completedCount = lessons.stream().filter(l -> repository.isLessonCompleted(l.getId())).count();
+        int modulesCompleted = (int) completedCount;
+        
+        int coins = modulesCompleted * 100;
+        
+        java.util.Map<String, Double> quizStats = repository.getQuizStats(user);
+        int maxScore = quizStats.get("max").intValue();
+        int minScore = quizStats.get("min").intValue();
+        int medianScore = quizStats.get("median").intValue();
+        
         String badgeLabel = determineBadge(modulesCompleted);
 
         // Hero Section
@@ -38,9 +46,7 @@ public class StudentDashboardView extends VBox {
         HBox summaryGrid = new HBox(24);
         summaryGrid.setAlignment(Pos.TOP_LEFT);
         
-        Region spacer = new Region();
-        
-        VBox learningPanel = buildLearningProgress(modulesCompleted, lessons.size(), quizzesTaken, averageScore, bestScore);
+        VBox learningPanel = buildLearningProgress(modulesCompleted, lessons.size(), maxScore, minScore, medianScore);
         VBox walletPanel = buildWalletSummary(repository, user);
         
         learningPanel.setPrefWidth(400);
@@ -52,9 +58,9 @@ public class StudentDashboardView extends VBox {
         summaryGrid.getChildren().addAll(learningPanel, walletPanel);
         getChildren().add(summaryGrid);
 
-        // Jobs Section
-        List<JobOpportunity> jobOpportunities = repository.getJobOpportunities();
-        getChildren().add(buildBookmarkedJobs(jobOpportunities));
+        // Jobs Section - Show all favorited jobs on dashboard
+        List<JobOpportunity> favoritedJobs = repository.fetchFavoriteJobs(user);
+        getChildren().add(buildBookmarkedJobs(favoritedJobs));
     }
 
     private Panel buildWelcomePanel(User user,
@@ -71,10 +77,10 @@ public class StudentDashboardView extends VBox {
         VBox left = new VBox(8, greeting, subtitle);
         left.setAlignment(Pos.CENTER_LEFT);
 
-        VBox coinsBox = createHeroMetric("ParivaarCoins", String.valueOf(coins), "Keep earning!");
+        VBox pointsBox = createHeroMetric("ParivaarCoins", String.valueOf(coins), "Keep learning!");
         VBox badgeBox = createHeroMetric("Current Badge", badgeLabel, modulesCompleted + " modules done");
         
-        HBox metrics = new HBox(32, coinsBox, badgeBox);
+        HBox metrics = new HBox(32, pointsBox, badgeBox);
         metrics.setAlignment(Pos.CENTER_RIGHT);
         
         Region spacer = new Region();
@@ -91,10 +97,10 @@ public class StudentDashboardView extends VBox {
 
     private VBox buildLearningProgress(int modulesCompleted,
                                         int moduleTotal,
-                                        int quizzesTaken,
-                                        int averageScore,
-                                        int bestScore) {
-        Label header = new Label("Learning Progress");
+                                        int maxScore,
+                                        int minScore,
+                                        int medianScore) {
+        Label header = new Label("Learning Performance");
         header.getStyleClass().add("panel-header");
         
         double progress = moduleTotal > 0 ? (double) modulesCompleted / moduleTotal : 0;
@@ -102,15 +108,15 @@ public class StudentDashboardView extends VBox {
         progressBar.setMaxWidth(Double.MAX_VALUE);
         progressBar.getStyleClass().add("learning-progress-bar");
 
-        Label progressLabel = new Label(Math.round(progress * 100) + "% Completion");
+        Label progressLabel = new Label(modulesCompleted + " / " + moduleTotal + " Modules Completed (" + Math.round(progress * 100) + "%)");
         progressLabel.getStyleClass().add("progress-text");
 
         HBox stats = new HBox(0,
-                createStatItem("Quizzes", String.valueOf(quizzesTaken)),
+                createStatItem("Max Score", maxScore + "%"),
                 createVerticalSeparator(),
-                createStatItem("Avg Score", averageScore + "%"),
+                createStatItem("Min Score", minScore + "%"),
                 createVerticalSeparator(),
-                createStatItem("Best Score", bestScore + "%")
+                createStatItem("Median", medianScore + "%")
         );
         stats.setAlignment(Pos.CENTER);
         
@@ -160,14 +166,14 @@ public class StudentDashboardView extends VBox {
         }
         
         VBox list = new VBox(16);
-        jobs.stream().limit(3).forEach(job -> {
+        jobs.forEach(job -> {
              HBox row = new HBox(16);
              row.setAlignment(Pos.CENTER_LEFT);
              
              VBox info = new VBox(4);
              Label title = new Label(job.getTitle());
              title.getStyleClass().add("job-title");
-             Label meta = new Label(job.getLocation() + " • " + job.getCategory());
+             Label meta = new Label(job.getLocation() + " • " + job.getCompany());
              meta.getStyleClass().add("job-meta");
              info.getChildren().addAll(title, meta);
              
@@ -176,6 +182,15 @@ public class StudentDashboardView extends VBox {
              
              Button apply = new Button("View");
              apply.getStyleClass().add("small-button");
+             apply.setOnAction(e -> {
+                 if (job.getJobLink() != null && !job.getJobLink().isBlank()) {
+                     try {
+                         Desktop.getDesktop().browse(new URI(job.getJobLink()));
+                     } catch (IOException | URISyntaxException ex) {
+                         ex.printStackTrace();
+                     }
+                 }
+             });
              
              row.getChildren().addAll(info, spacer, apply);
              list.getChildren().add(row);

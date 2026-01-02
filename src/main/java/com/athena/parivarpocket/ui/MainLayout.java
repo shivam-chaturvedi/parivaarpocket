@@ -98,8 +98,14 @@ public class MainLayout {
         render();
     }
 
+    private final java.util.Map<MainTab, Node> tabContentCache = new java.util.EnumMap<>(MainTab.class);
+
     private Node contentForTab(MainTab tab) {
-        return switch (tab) {
+        if (tabContentCache.containsKey(tab)) {
+            return tabContentCache.get(tab);
+        }
+
+        Node content = switch (tab) {
             case DASHBOARD -> user.getRole() == UserRole.STUDENT
                     ? new StudentDashboardView(user, repository)
                     : new EducatorDashboardView(repository, reportService);
@@ -108,6 +114,9 @@ public class MainLayout {
             case WALLET -> new WalletModuleView(repository, user, offlineSyncService);
             case NOTIFICATIONS -> new NotificationsView(repository.getNotifications(user), offlineSyncService);
         };
+        
+        tabContentCache.put(tab, content);
+        return content;
     }
 
     private void refreshContent() {

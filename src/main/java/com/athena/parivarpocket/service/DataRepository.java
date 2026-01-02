@@ -3,6 +3,7 @@ package com.athena.parivarpocket.service;
 import com.athena.parivarpocket.model.*;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 
 import java.net.URLEncoder;
@@ -30,6 +31,8 @@ public class DataRepository {
     private volatile List<WalletEntry> walletCache;
     private volatile List<StudentProfile> profileCache;
     private volatile Map<String, BudgetGoal> budgetGoalCache = Map.of();
+    private volatile List<String> favoriteIdsCache = List.of();
+    private volatile List<JobOpportunity> favoriteJobsCache = List.of();
     private User currentUser;
 
     public DataRepository(LocalStoreService storeService) {
@@ -43,13 +46,20 @@ public class DataRepository {
         quizCache = mapTable("quiz_results", null, this::toQuizResult);
         quizDefinitionCache = mapTable("quizzes", null, this::toQuizDefinition);
         quizQuestionCache = mapTable("quiz_questions", null, this::toQuizQuestion);
-        jobCache = mapTable("job_opportunities", null, this::toJobOpportunity);
+        jobCache = mapTable("jobs", null, this::toJobOpportunity);
         notificationsCache = mapTable("notifications", null, this::toNotification);
         studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
         profileCache = mapTable("profiles", null, this::toStudentProfile);
         walletCache = fetchWalletFromSupabase(user);
         lessonCompletionCache = user != null ? fetchLessonCompletions(user) : List.of();
         quizAttemptCache = user != null ? fetchQuizAttempts(user) : List.of();
+        
+        // Eagerly pre-fetch favorites for instant tab transitions
+        if (user != null) {
+            this.favoriteIdsCache = fetchFavoriteJobIdsFromSupabase(user);
+            this.favoriteJobsCache = fetchFavoriteJobsFromSupabase(user);
+        }
+
         if (notificationsCache.isEmpty()) {
             notificationsCache = List.of(new NotificationItem(
                     "Welcome",
@@ -86,7 +96,46 @@ public class DataRepository {
         if (jobCache != null) {
             return jobCache;
         }
-        return mapTable("job_opportunities", null, this::toJobOpportunity);
+        jobCache = mapTable("jobs", null, this::toJobOpportunity);
+        return jobCache;
+    }
+
+    public LocalDateTime getLatestJobSyncTime() {
+        try {
+            // Fetch only the created_at of the most recent job
+            String query = "select=created_at&order=created_at.desc&limit=1";
+            JsonArray data = supabaseClient.fetchTable("jobs", query, null);
+            if (data != null && !data.isEmpty()) {
+                JsonObject obj = data.get(0).getAsJsonObject();
+                if (obj.has("created_at") && !obj.get("created_at").isJsonNull()) {
+                    return LocalDateTime.parse(obj.get("created_at").getAsString().replace("Z", ""));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Unable to fetch latest job sync time: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public List<JobOpportunity> syncJobs(List<JobOpportunity> jobs) {
+        if (jobs == null || jobs.isEmpty()) {
+            return getJobOpportunities();
+        }
+        JsonArray payload = new JsonArray();
+        for (JobOpportunity job : jobs) {
+            if (job == null) {
+                continue;
+            }
+            payload.add(jobToPayload(job));
+        }
+        JsonArray inserted = supabaseClient.insertRecord("jobs", "on_conflict=id", payload, null);
+        List<JobOpportunity> persisted = parseJobArray(inserted);
+        if (!persisted.isEmpty()) {
+            jobCache = persisted;
+            return persisted;
+        }
+        jobCache = List.copyOf(jobs);
+        return jobCache;
     }
 
     public List<StudentProfile> getStudentProfiles() {
@@ -133,6 +182,82 @@ public class DataRepository {
             return false;
         }
         return lessonCompletionCache.stream().anyMatch(c -> lessonId.equals(c.getLessonId()));
+    }
+
+    public Map<String, Double> getQuizStats(User user) {
+        List<QuizAttempt> attempts = user != null ? fetchQuizAttempts(user) : List.of();
+        if (attempts.isEmpty()) {
+            return Map.of("max", 0.0, "min", 0.0, "median", 0.0);
+        }
+        List<Double> scores = attempts.stream()
+                .map(a -> (double) a.getScore() / Math.max(a.getMaxScore(), 1) * 100)
+                .sorted()
+                .toList();
+        
+        double max = scores.get(scores.size() - 1);
+        double min = scores.get(0);
+        double median;
+        if (scores.size() % 2 == 0) {
+            median = (scores.get(scores.size() / 2 - 1) + scores.get(scores.size() / 2)) / 2;
+        } else {
+            median = scores.get(scores.size() / 2);
+        }
+        
+        Map<String, Double> stats = new HashMap<>();
+        stats.put("max", max);
+        stats.put("min", min);
+        stats.put("median", median);
+        return stats;
+    }
+
+    public void awardParivaarPoints(User user, int amount, String reason) {
+        if (user == null || amount <= 0) return;
+        
+        StudentProgress progress = getStudentProgress(user.getEmail());
+        if (progress == null) {
+            // Create a default progress object if none exists
+            progress = new StudentProgress(user.getName(), user.getEmail(), 0, getLessons().size(), 0, 0, 0, 0, 0, 0, 0, 0);
+        }
+        
+        int newPoints = progress.getParivaarPoints() + amount;
+        StudentProgress updated = new StudentProgress(
+                progress.getStudentName(),
+                progress.getUserEmail(),
+                progress.getModulesCompleted(),
+                progress.getTotalModules(),
+                progress.getQuizzesTaken(),
+                progress.getAverageScore(),
+                progress.getWalletHealthScore(),
+                newPoints,
+                progress.getEmploymentApplications(),
+                progress.getJobSaves(),
+                progress.getWalletSavings(),
+                progress.getAlerts()
+        );
+        
+        if (updateStudentProgress(updated)) {
+            // Add wallet entry as income
+            addWalletEntry(user, new WalletEntry(
+                WalletEntryType.INCOME,
+                "Education",
+                (double) amount,
+                reason != null ? reason : "Lesson completion reward",
+                LocalDate.now()
+            ));
+
+            // Refresh cache
+            studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
+        }
+    }
+
+    public StudentProgress getStudentProgress(String email) {
+        if (studentProgressCache == null) {
+            studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
+        }
+        return studentProgressCache.stream()
+                .filter(p -> p.getUserEmail().equalsIgnoreCase(email))
+                .findFirst()
+                .orElse(null);
     }
 
     public boolean createLessonWithQuiz(String lessonTitle,
@@ -403,16 +528,6 @@ public class DataRepository {
         supabaseClient.insertRecord("wallet_entries", null, payload, user.getAccessToken());
     }
 
-    private JsonArray toJsonArray(List<String> values) {
-        JsonArray array = new JsonArray();
-        if (values != null) {
-            for (String value : values) {
-                array.add(value);
-            }
-        }
-        return array;
-    }
-
     private void cacheLesson(Lesson lesson) {
         if (lesson == null) {
             return;
@@ -548,17 +663,192 @@ public class DataRepository {
         return new JobOpportunity(
                 safeString(json, "id", ""),
                 safeString(json, "title", "Job Opportunity"),
-                safeString(json, "company", "Partner Organisation"),
+                safeString(json, "company_name", "Partner Organisation"),
                 safeString(json, "location", "Unknown"),
+                safeString(json, "locality", "Unknown"),
+                safeString(json, "job_link", ""),
+                safeLong(json, "pub_date_ts_milli", 0L),
+                safeString(json, "formatted_relative_time", ""),
+                safeNullableDouble(json, "salary_min"),
+                safeNullableDouble(json, "salary_max"),
+                safeString(json, "salary_type", ""),
                 safeString(json, "category", "General"),
-                safeString(json, "hours", "Flexible hours"),
-                safeString(json, "pay_range", "Negotiable"),
                 safeStringList(json, "required_skills"),
-                safeString(json, "safety_notes", ""),
-                safeString(json, "contact", ""),
-                safeString(json, "job_url", ""),
-                safeInt(json, "suitability_score", 0)
+                safeString(json, "working_hours", "Full-time"),
+                safeString(json, "safety_guidance", "Always verify employer identity."),
+                safeString(json, "contact_info", "Apply via Indeed.")
         );
+    }
+
+    private JsonObject jobToPayload(JobOpportunity job) {
+        JsonObject payload = new JsonObject();
+        String id = job.getId();
+        if (id == null || id.isBlank()) {
+            id = java.util.UUID.randomUUID().toString();
+        }
+        payload.addProperty("id", id);
+        payload.addProperty("title", defaultIfBlank(job.getTitle(), "Job Opportunity"));
+        payload.addProperty("company_name", defaultIfBlank(job.getCompany(), "Partner Organisation"));
+        payload.addProperty("location", defaultIfBlank(job.getLocation(), "Unknown"));
+        payload.addProperty("locality", defaultIfBlank(job.getLocality(), "Unknown"));
+        payload.addProperty("job_link", defaultIfBlank(job.getJobLink(), ""));
+        long pubDate = job.getPubDateTsMilli();
+        if (pubDate > 0) {
+            payload.addProperty("pub_date_ts_milli", pubDate);
+        } else {
+            payload.add("pub_date_ts_milli", JsonNull.INSTANCE);
+        }
+        payload.addProperty("formatted_relative_time", defaultIfBlank(job.getFormattedRelativeTime(), ""));
+        addNullable(payload, "salary_min", job.getSalaryMin());
+        addNullable(payload, "salary_max", job.getSalaryMax());
+        addNullableString(payload, "salary_type", job.getSalaryType());
+        payload.addProperty("category", job.getCategory());
+        payload.add("required_skills", toJsonArray(job.getRequiredSkills()));
+        payload.addProperty("working_hours", job.getWorkingHours());
+        payload.addProperty("safety_guidance", job.getSafetyGuidance());
+        payload.addProperty("contact_info", job.getContactInfo());
+        return payload;
+    }
+
+    public void toggleFavorite(User user, String jobId) {
+        if (user == null || jobId == null) return;
+        try {
+            // Check if the job is already favorited by fetching the record
+            String query = "user_email=eq." + user.getEmail() + "&job_id=eq." + jobId;
+            JsonArray existing = supabaseClient.fetchTable("job_favorites", query, null);
+
+            if (existing != null && !existing.isEmpty()) {
+                String idToRemove = existing.get(0).getAsJsonObject().get("id").getAsString();
+                supabaseClient.deleteRecord("job_favorites", idToRemove, null);
+                
+                // Update caches
+                List<String> updatedIds = new ArrayList<>(favoriteIdsCache);
+                updatedIds.remove(jobId);
+                this.favoriteIdsCache = List.copyOf(updatedIds);
+                
+                List<JobOpportunity> updatedJobs = new ArrayList<>(favoriteJobsCache);
+                updatedJobs.removeIf(j -> j.getId().equals(jobId));
+                this.favoriteJobsCache = List.copyOf(updatedJobs);
+            } else {
+                JsonObject fav = new JsonObject();
+                fav.addProperty("user_email", user.getEmail());
+                fav.addProperty("job_id", jobId);
+                JsonArray result = supabaseClient.insertRecord("job_favorites", null, fav, null);
+                
+                // Update caches
+                List<String> updatedIds = new ArrayList<>(favoriteIdsCache);
+                updatedIds.add(jobId);
+                this.favoriteIdsCache = List.copyOf(updatedIds);
+                
+                // If we have the job in cache, add to favorite jobs cache
+                if (jobCache != null) { // Assuming jobCache is a List<JobOpportunity> containing all jobs
+                    jobCache.stream()
+                            .filter(j -> j.getId().equals(jobId))
+                            .findFirst()
+                            .ifPresent(j -> {
+                                List<JobOpportunity> updatedJobs = new ArrayList<>(favoriteJobsCache);
+                                updatedJobs.add(j);
+                                this.favoriteJobsCache = List.copyOf(updatedJobs);
+                            });
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Favorite toggle failed: " + e.getMessage());
+        }
+    }
+
+    public boolean isFavorite(User user, String jobId) {
+        if (user == null || jobId == null) return false;
+        return favoriteIdsCache.contains(jobId);
+    }
+
+    public List<String> fetchFavoriteJobIds(User user) {
+        return favoriteIdsCache;
+    }
+
+    private List<String> fetchFavoriteJobIdsFromSupabase(User user) {
+        if (user == null) return Collections.emptyList();
+        try {
+            String query = "select=job_id&user_email=eq." + user.getEmail();
+            JsonArray data = supabaseClient.fetchTable("job_favorites", query, null);
+            List<String> ids = new ArrayList<>();
+            for (JsonElement e : data) {
+                ids.add(e.getAsJsonObject().get("job_id").getAsString());
+            }
+            return ids;
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
+
+    public List<JobOpportunity> fetchFavoriteJobs(User user) {
+        return favoriteJobsCache;
+    }
+
+    private List<JobOpportunity> fetchFavoriteJobsFromSupabase(User user) {
+        if (user == null) return Collections.emptyList();
+        List<String> jobIds = fetchFavoriteJobIdsFromSupabase(user);
+        if (jobIds.isEmpty()) return Collections.emptyList();
+
+        try {
+            // Join IDs into a comma-separated list for the 'in' filter
+            String idsFilter = String.join(",", jobIds);
+            String query = "id=in.(" + idsFilter + ")";
+            JsonArray data = supabaseClient.fetchTable("jobs", query, null);
+            return parseJobArray(data);
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Failed to fetch favorite job details: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private static void addNullable(JsonObject payload, String key, Number value) {
+        if (value == null) {
+            payload.add(key, JsonNull.INSTANCE);
+        } else {
+            payload.addProperty(key, value);
+        }
+    }
+
+    private static void addNullableString(JsonObject payload, String key, String value) {
+        if (value == null || value.isBlank()) {
+            payload.add(key, JsonNull.INSTANCE);
+        } else {
+            payload.addProperty(key, value);
+        }
+    }
+
+    private JsonArray toJsonArray(List<String> values) {
+        JsonArray array = new JsonArray();
+        if (values != null) {
+            for (String value : values) {
+                if (value != null) {
+                    array.add(value);
+                }
+            }
+        }
+        return array;
+    }
+
+    private List<JobOpportunity> parseJobArray(JsonArray data) {
+        if (data == null || data.isEmpty()) {
+            return List.of();
+        }
+        List<JobOpportunity> list = new ArrayList<>();
+        for (JsonElement element : data) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JobOpportunity job = toJobOpportunity(element.getAsJsonObject());
+            if (job != null) {
+                list.add(job);
+            }
+        }
+        return List.copyOf(list);
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private NotificationItem toNotification(JsonObject json) {
@@ -747,6 +1037,26 @@ public class DataRepository {
         return fallback;
     }
 
+    private Double safeNullableDouble(JsonObject json, String key) {
+        if (json.has(key) && !json.get(key).isJsonNull()) {
+            try {
+                return json.get(key).getAsDouble();
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private long safeLong(JsonObject json, String key, long fallback) {
+        if (json.has(key) && !json.get(key).isJsonNull()) {
+            try {
+                return json.get(key).getAsLong();
+            } catch (Exception ignored) {
+            }
+        }
+        return fallback;
+    }
+
     private List<String> safeStringList(JsonObject json, String key) {
         if (json.has(key) && !json.get(key).isJsonNull()) {
             JsonElement element = json.get(key);
@@ -794,6 +1104,21 @@ public class DataRepository {
         payload.addProperty("user_email", user.getEmail().toLowerCase(Locale.ROOT));
         payload.addProperty("status", "Pending");
         supabaseClient.insertRecord("job_applications", null, payload, user.getAccessToken());
+    }
+
+    public void logStudentActivity(User user, String activityType, JsonObject activityData) {
+        if (user == null || activityType == null || activityType.isBlank()) {
+            return;
+        }
+        JsonObject payload = new JsonObject();
+        payload.addProperty("user_email", user.getEmail().toLowerCase(Locale.ROOT));
+        payload.addProperty("activity_type", activityType);
+        payload.add("activity_data", activityData != null ? activityData : new JsonObject());
+        try {
+            supabaseClient.insertRecord("student_activity_logs", null, payload, user.getAccessToken());
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Unable to log student activity: " + e.getMessage());
+        }
     }
 
     public List<JobApplication> fetchJobApplications(String userEmail) {

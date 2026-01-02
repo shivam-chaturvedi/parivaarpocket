@@ -43,7 +43,7 @@ public class ReportService {
                 Quizzes: %d
                 Average Score: %.1f%%
                 Wallet Health: %.1f%%
-                ParivaarPoints: %d
+                ParivaarCoins: %d
                 Employment commitments: %d
                 Jobs saved for follow-up: %d
                 Wallet savings: ₹%d

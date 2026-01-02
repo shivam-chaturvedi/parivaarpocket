@@ -38,6 +38,7 @@ com/athena/parivarpocket/ui/EducatorDashboardView$7.class
 com/athena/parivarpocket/model/QuizQuestion.class
 com/athena/parivarpocket/ui/StudentDashboardView.class
 com/athena/parivarpocket/ui/Panel.class
+com/athena/parivarpocket/ui/WorkModuleView$2.class
 com/athena/parivarpocket/ui/EducatorDashboardView$3.class
 com/athena/parivarpocket/service/CryptoService.class
 com/athena/parivarpocket/ui/Card.class

@@ -1,8 +1,10 @@
 package com.athena.parivarpocket.service;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 import java.io.IOException;
 import java.net.URI;
@@ -19,7 +21,7 @@ public class SupabaseClient {
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
-    private final Gson gson = new Gson();
+    private final Gson gson = new GsonBuilder().serializeNulls().create();
 
     public JsonArray fetchTable(String table) {
         return fetchTable(table, null, null);
@@ -80,8 +82,15 @@ public class SupabaseClient {
                 .header("apikey", API_KEY)
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
-                .header("Prefer", "resolution=merge-duplicates,return=representation")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(payload)));
+                .header("Prefer", "resolution=merge-duplicates,return=representation");
+        JsonElement normalizedPayload = payload;
+        if ("jobs".equals(table) && payload != null && payload.isJsonObject()) {
+            System.err.println("[SupabaseClient] jobs insert received JsonObject, wrapping into JsonArray");
+            JsonArray array = new JsonArray();
+            array.add(payload.getAsJsonObject());
+            normalizedPayload = array;
+        }
+        builder.POST(HttpRequest.BodyPublishers.ofString(gson.toJson(normalizedPayload)));
         if (bearerToken != null && !bearerToken.isBlank()) {
             builder.header("Authorization", "Bearer " + bearerToken);
         } else {
@@ -103,6 +112,32 @@ public class SupabaseClient {
         }
     }
 
+    public void deleteRecord(String table, String queryParams, String bearerToken) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(buildWriteUri(table, queryParams)))
+                .header("apikey", API_KEY)
+                .DELETE();
+        
+        if (bearerToken != null && !bearerToken.isBlank()) {
+            builder.header("Authorization", "Bearer " + bearerToken);
+        } else {
+            builder.header("Authorization", "Bearer " + API_KEY);
+        }
+        
+        HttpRequest request = builder.build();
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400 && response.statusCode() != 404) {
+                throw new IllegalStateException("Supabase delete failed (" + table + "): " + response.body());
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to reach Supabase for deletion in table " + table, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Supabase delete request was interrupted", e);
+        }
+    }
+
     private JsonArray parseArray(String body) {
         if (body == null || body.isBlank()) {
             return new JsonArray();
@@ -114,3 +149,4 @@ public class SupabaseClient {
         return element.getAsJsonArray();
     }
 }
+
