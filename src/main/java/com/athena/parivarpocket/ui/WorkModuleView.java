@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -174,8 +175,8 @@ public class WorkModuleView extends VBox {
         hoursFilter.setOnAction(e -> refreshListings());
 
         limitFilter.getItems().addAll("Show 10", "Show 15", "Show All");
-        limitFilter.getSelectionModel().select("Show All");
         limitFilter.getStyleClass().add("job-filter-choice");
+        limitFilter.setValue("Show All");
         limitFilter.setOnAction(e -> refreshListings());
 
         paidOnly.setOnAction(e -> refreshListings());
@@ -399,11 +400,28 @@ public class WorkModuleView extends VBox {
     }
 
     private void updateJobListing(List<JobOpportunity> jobs) {
-        List<JobOpportunity> copy = new ArrayList<>(jobs);
-        // Note: Removing shuffle to maintain API's date sorting
-        allJobs = copy;
-        updateJobCount(copy.size());
+        if (jobs == null || jobs.isEmpty()) {
+            refreshListings();
+            return;
+        }
+        LinkedHashMap<String, JobOpportunity> merged = new LinkedHashMap<>();
+        for (JobOpportunity job : jobs) {
+            if (job == null || job.getId() == null || job.getId().isBlank()) {
+                continue;
+            }
+            merged.put(job.getId(), job);
+        }
+        for (JobOpportunity job : allJobs) {
+            if (job == null || job.getId() == null || job.getId().isBlank()) {
+                continue;
+            }
+            merged.putIfAbsent(job.getId(), job);
+        }
+        List<JobOpportunity> combined = new ArrayList<>(merged.values());
+        allJobs = combined;
+        updateJobCount(combined.size());
         populateFilters();
+        limitFilter.setValue("Show All");
         refreshListings();
     }
 

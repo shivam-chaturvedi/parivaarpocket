@@ -5,11 +5,9 @@ import com.athena.parivarpocket.model.User;
 import com.athena.parivarpocket.model.UserRole;
 import com.athena.parivarpocket.service.DataRepository;
 import com.athena.parivarpocket.service.OfflineSyncService;
-import com.athena.parivarpocket.service.ReportService;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
-import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
@@ -22,25 +20,18 @@ public class MainLayout {
     private final User user;
     private final DataRepository repository;
     private final OfflineSyncService offlineSyncService;
-    private final ReportService reportService;
     private MainTab activeTab = MainTab.DASHBOARD;
     private final Runnable onLogout;
     private final StackPane centerWrapper = new StackPane();
-    private final ProgressIndicator loader = new ProgressIndicator();
-    private boolean dataLoaded = false;
 
     public MainLayout(User user,
                       DataRepository repository,
                       OfflineSyncService offlineSyncService,
-                      ReportService reportService,
                       Runnable onLogout) {
         this.user = user;
         this.repository = repository;
         this.offlineSyncService = offlineSyncService;
-        this.reportService = reportService;
         this.onLogout = onLogout;
-        loader.setMaxSize(48, 48);
-        centerWrapper.getChildren().add(loader);
         root.setCenter(centerWrapper);
         render();
         prefetchData(user);
@@ -108,11 +99,11 @@ public class MainLayout {
         Node content = switch (tab) {
             case DASHBOARD -> user.getRole() == UserRole.STUDENT
                     ? new StudentDashboardView(user, repository)
-                    : new EducatorDashboardView(repository, reportService);
+                    : new EducatorDashboardView(repository);
             case LEARNING -> new LearningModuleView(repository);
             case WORK -> new WorkModuleView(repository);
             case WALLET -> new WalletModuleView(repository, user, offlineSyncService);
-            case NOTIFICATIONS -> new NotificationsView(repository.getNotifications(user), offlineSyncService);
+            case NOTIFICATIONS -> new NotificationsView(repository);
         };
         
         tabContentCache.put(tab, content);
@@ -120,15 +111,7 @@ public class MainLayout {
     }
 
     private void refreshContent() {
-        if (!dataLoaded) {
-            showLoading();
-            return;
-        }
         showContent(buildScrollableContent(activeTab));
-    }
-
-    private void showLoading() {
-        centerWrapper.getChildren().setAll(loader);
     }
 
     private void showContent(Node content) {
@@ -138,10 +121,7 @@ public class MainLayout {
     private void prefetchData(User user) {
         CompletableFuture.runAsync(() -> {
             repository.prefetchAll(user);
-            Platform.runLater(() -> {
-                dataLoaded = true;
-                render();
-            });
+            Platform.runLater(this::refreshContent);
         });
     }
 }

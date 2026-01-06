@@ -14,7 +14,6 @@ public class App extends Application {
     private final LocalStoreService localStoreService = new LocalStoreService();
     private final DataRepository repository = new DataRepository(localStoreService);
     private final OfflineSyncService offlineSyncService = new OfflineSyncService();
-    private final ReportService reportService = new ReportService();
     private StackPane root;
 
     @Override
@@ -40,7 +39,6 @@ public class App extends Application {
                 user,
                 repository,
                 offlineSyncService,
-                reportService,
                 this::showLogin);
         root.getChildren().setAll(layout.getView());
     }

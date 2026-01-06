@@ -4,14 +4,17 @@ import com.athena.parivarpocket.model.JobApplication;
 import com.athena.parivarpocket.model.Lesson;
 import com.athena.parivarpocket.model.LessonCompletion;
 import com.athena.parivarpocket.model.QuizAttempt;
+import com.athena.parivarpocket.model.StudentActivity;
 import com.athena.parivarpocket.model.StudentProfile;
 import com.athena.parivarpocket.model.StudentProgress;
 import com.athena.parivarpocket.model.WalletEntry;
+import com.athena.parivarpocket.model.UserRole;
 import com.athena.parivarpocket.service.DataRepository;
-import com.athena.parivarpocket.service.ReportService;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -20,6 +23,7 @@ import javafx.scene.chart.*;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,18 +37,19 @@ import java.util.concurrent.CompletableFuture;
 
 public class EducatorDashboardView extends VBox {
     private final DataRepository repository;
-    private final ReportService reportService;
-    private final List<StudentProfile> allStudents;
-    private final FilteredList<StudentProfile> filteredStudents;
+    private final ObservableList<StudentProfile> allStudents = FXCollections.observableArrayList();
+    private final FilteredList<StudentProfile> filteredStudents = new FilteredList<>(allStudents, p -> true);
     private final TableView<StudentProfile> studentTable = new TableView<>();
     private final Map<String, StudentProgress> progressCache = new HashMap<>();
+    private final Label totalStudentsValue = createStatLabel("0");
+    private final Label performingWellValue = createStatLabel("0");
+    private final Label needsHelpValue = createStatLabel("0");
+    private final Label avgCompletionValue = createStatLabel("0%");
+    private final PieChart walletHealthPie = new PieChart();
+    private final XYChart.Series<String, Number> savingsSeries = new XYChart.Series<>();
 
-    public EducatorDashboardView(DataRepository repository, ReportService reportService) {
+    public EducatorDashboardView(DataRepository repository) {
         this.repository = repository;
-        this.reportService = reportService;
-        List<StudentProfile> profiles = repository.getStudentProfiles();
-        this.allStudents = new ArrayList<>(profiles != null ? profiles : Collections.emptyList());
-        this.filteredStudents = new FilteredList<>(FXCollections.observableArrayList(allStudents), p -> true);
 
         setSpacing(24);
         setFillWidth(true);
@@ -57,9 +62,14 @@ public class EducatorDashboardView extends VBox {
         subtitle.getStyleClass().add("dashboard-subtitle");
         getChildren().addAll(title, subtitle);
 
-        getChildren().add(buildStudentMonitoringSection());
-        getChildren().add(buildAnalyticsSection());
-        getChildren().add(buildPerformanceSection());
+        getChildren().addAll(
+                buildStudentMonitoringSection(),
+                buildAnalyticsSection(),
+                buildPerformanceSection()
+        );
+
+        refreshMonitoringStats();
+        loadStudentProfiles();
     }
 
     private Node buildStudentMonitoringSection() {
@@ -97,54 +107,24 @@ public class EducatorDashboardView extends VBox {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button exportBtn = new Button("Export All Reports");
-        exportBtn.setGraphic(new Label("\u2913"));
-        exportBtn.getStyleClass().add("action-button-bw");
-        exportBtn.setOnAction(e -> {
-            if (reportService == null) return;
-            allStudents.stream()
-                    .map(this::progressForProfile)
-                    .filter(Objects::nonNull)
-                    .forEach(reportService::exportStudentReport);
-        });
-
-        topBar.getChildren().addAll(search, searchBtn, spacer, exportBtn);
+        topBar.getChildren().addAll(search, searchBtn, spacer);
 
         HBox stats = new HBox(16);
         stats.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(stats, Priority.ALWAYS);
 
-        long total = allStudents.size();
-        long excellent = allStudents.stream()
-                .map(this::progressForProfile)
-                .filter(progress -> progress != null && progress.getWalletHealthScore() >= 75)
-                .count();
-        long needHelp = allStudents.stream()
-                .map(this::progressForProfile)
-                .filter(progress -> progress != null && progress.getWalletHealthScore() < 50)
-                .count();
-
-        DoubleSummaryStatistics completionStats = allStudents.stream()
-                .map(this::progressForProfile)
-                .filter(Objects::nonNull)
-                .mapToDouble(progress -> progress.getTotalModules() == 0
-                        ? 0
-                        : (double) progress.getModulesCompleted() / progress.getTotalModules() * 100)
-                .summaryStatistics();
-        double avgCompletion = completionStats.getCount() == 0 ? 0 : completionStats.getAverage();
-
         stats.getChildren().addAll(
-                createStatCard(String.valueOf(total), "Total Students"),
-                createStatCard(String.valueOf(excellent), "Performing Well"),
-                createStatCard(String.valueOf(needHelp), "Need Attention"),
-                createStatCard(String.valueOf((int) avgCompletion) + "%", "Avg Completion")
+                createStatCard(totalStudentsValue, "Total Students"),
+                createStatCard(performingWellValue, "Performing Well"),
+                createStatCard(needsHelpValue, "Need Attention"),
+                createStatCard(avgCompletionValue, "Avg Completion")
         );
 
         container.getChildren().addAll(sectionTitle, topBar, stats);
         return container;
     }
 
-    private Node createStatCard(String value, String title) {
+    private Node createStatCard(Label valueLabel, String title) {
         VBox card = new VBox(8);
         card.getStyleClass().add("stat-card-bw");
         card.setAlignment(Pos.CENTER);
@@ -152,14 +132,17 @@ public class EducatorDashboardView extends VBox {
         HBox.setHgrow(card, Priority.ALWAYS);
         card.setMaxWidth(Double.MAX_VALUE);
 
-        Label valLabel = new Label(value);
-        valLabel.getStyleClass().add("stat-value-bw");
-
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("stat-title-bw");
 
-        card.getChildren().addAll(valLabel, titleLabel);
+        card.getChildren().addAll(valueLabel, titleLabel);
         return card;
+    }
+
+    private Label createStatLabel(String initialValue) {
+        Label label = new Label(initialValue);
+        label.getStyleClass().add("stat-value-bw");
+        return label;
     }
 
     private Node buildAnalyticsSection() {
@@ -174,29 +157,10 @@ public class EducatorDashboardView extends VBox {
         Label l1 = new Label("Student Wallet Health Distribution");
         l1.getStyleClass().add("chart-title");
 
-        long excellent = allStudents.stream()
-                .map(this::progressForProfile)
-                .filter(progress -> progress != null && progress.getWalletHealthScore() >= 80)
-                .count();
-        long good = allStudents.stream()
-                .map(this::progressForProfile)
-                .filter(progress -> progress != null && progress.getWalletHealthScore() >= 50 && progress.getWalletHealthScore() < 80)
-                .count();
-        long poor = allStudents.stream()
-                .map(this::progressForProfile)
-                .filter(progress -> progress != null && progress.getWalletHealthScore() < 50)
-                .count();
+        walletHealthPie.setLabelsVisible(true);
+        walletHealthPie.setLegendSide(javafx.geometry.Side.RIGHT);
 
-        PieChart pie = new PieChart();
-        pie.getData().addAll(
-                new PieChart.Data("Excellent", excellent),
-                new PieChart.Data("Good", good),
-                new PieChart.Data("Needs Help", poor)
-        );
-        pie.setLabelsVisible(true);
-        pie.setLegendSide(javafx.geometry.Side.RIGHT);
-
-        chart1.getChildren().addAll(l1, pie);
+        chart1.getChildren().addAll(l1, walletHealthPie);
 
         VBox chart2 = new VBox(10);
         chart2.getStyleClass().addAll("section-container", "bw-chart");
@@ -212,22 +176,97 @@ public class EducatorDashboardView extends VBox {
         bar.setLegendVisible(false);
         bar.setBarGap(10);
 
-        double avgSavings = allStudents.stream()
-                .map(this::progressForProfile)
-                .filter(Objects::nonNull)
-                .mapToInt(StudentProgress::getWalletSavings)
-                .average()
-                .orElse(0);
-
-        XYChart.Series<String, Number> series = new XYChart.Series<>();
-        series.getData().add(new XYChart.Data<>("Class Average", avgSavings));
-        series.getData().add(new XYChart.Data<>("Target", 2000));
-
-        bar.getData().add(series);
+        savingsSeries.setName("Savings");
+        bar.getData().add(savingsSeries);
         chart2.getChildren().addAll(l2, bar);
 
         container.getChildren().addAll(chart1, chart2);
         return container;
+    }
+
+    private void refreshMonitoringStats() {
+        List<StudentProgress> progressList = allStudents.stream()
+                .map(this::progressForProfile)
+                .filter(Objects::nonNull)
+                .toList();
+        int total = allStudents.size();
+        long performingWell = progressList.stream()
+                .filter(progress -> progress.getWalletHealthScore() >= 75)
+                .count();
+        long needAttention = progressList.stream()
+                .filter(progress -> progress.getWalletHealthScore() < 50)
+                .count();
+
+        DoubleSummaryStatistics completionStats = progressList.stream()
+                .mapToDouble(progress -> progress.getTotalModules() == 0
+                        ? 0
+                        : (double) progress.getModulesCompleted() / progress.getTotalModules() * 100)
+                .summaryStatistics();
+        double avgCompletion = completionStats.getCount() == 0 ? 0 : completionStats.getAverage();
+
+        totalStudentsValue.setText(String.valueOf(total));
+        performingWellValue.setText(String.valueOf(performingWell));
+        needsHelpValue.setText(String.valueOf(needAttention));
+        avgCompletionValue.setText(String.format(Locale.ROOT, "%d%%", Math.round(avgCompletion)));
+
+        updateAnalyticsCharts(progressList);
+    }
+
+    private void updateAnalyticsCharts(List<StudentProgress> progressList) {
+        long excellent = progressList.stream()
+                .filter(progress -> progress.getWalletHealthScore() >= 80)
+                .count();
+        long good = progressList.stream()
+                .filter(progress -> progress.getWalletHealthScore() >= 50 && progress.getWalletHealthScore() < 80)
+                .count();
+        long poor = progressList.stream()
+                .filter(progress -> progress.getWalletHealthScore() < 50)
+                .count();
+
+        walletHealthPie.getData().setAll(
+                new PieChart.Data("Excellent", excellent),
+                new PieChart.Data("Good", good),
+                new PieChart.Data("Needs Help", poor)
+        );
+
+        double avgSavings = progressList.stream()
+                .mapToInt(StudentProgress::getWalletSavings)
+                .average()
+                .orElse(0);
+
+        savingsSeries.getData().setAll(
+                new XYChart.Data<>("Class Average", avgSavings),
+                new XYChart.Data<>("Target", 2000)
+        );
+    }
+
+    private void loadStudentProfiles() {
+        studentTable.setPlaceholder(new Label("Loading students..."));
+        CompletableFuture.runAsync(() -> {
+            List<StudentProfile> profiles = Collections.emptyList();
+            try {
+                List<StudentProfile> fetched = repository.getStudentProfiles();
+                if (fetched != null) {
+                    profiles = fetched;
+                }
+            } catch (Exception e) {
+                System.err.println("[EducatorDashboardView] Unable to load student profiles: " + e.getMessage());
+            }
+            List<StudentProfile> studentsOnly = new ArrayList<>();
+            for (StudentProfile profile : profiles) {
+                if (isStudentProfile(profile)) {
+                    studentsOnly.add(profile);
+                }
+            }
+            Platform.runLater(() -> {
+                progressCache.clear();
+                allStudents.setAll(studentsOnly);
+                refreshMonitoringStats();
+                if (studentsOnly.isEmpty()) {
+                    studentTable.setPlaceholder(new Label("No students found. Try again later."));
+                }
+            });
+        });
     }
 
     private Node buildPerformanceSection() {
@@ -279,6 +318,9 @@ public class EducatorDashboardView extends VBox {
                         : profile.getEmail());
                 nameLabel.getStyleClass().add("cell-name-bw");
                 box.getChildren().add(nameLabel);
+                Label roleLabel = new Label(displayRoleLabel(profile));
+                roleLabel.getStyleClass().add("cell-subtext-bw");
+                box.getChildren().add(roleLabel);
                 if (progress != null && progress.getAlerts() > 0) {
                     Label alert = new Label("\u26A0 " + progress.getAlerts() + " alert" + (progress.getAlerts() > 1 ? "s" : ""));
                     alert.getStyleClass().add("cell-subtext-bw");
@@ -419,12 +461,47 @@ public class EducatorDashboardView extends VBox {
         return "Needs Attention";
     }
 
+    private boolean isStudentProfile(StudentProfile profile) {
+        if (profile == null) {
+            return false;
+        }
+        UserRole role = UserRole.fromMetadata(profile.getRole());
+        return role == null || role == UserRole.STUDENT;
+    }
+
+    private String displayRoleLabel(StudentProfile profile) {
+        if (profile == null) {
+            return "Student";
+        }
+        UserRole role = UserRole.fromMetadata(profile.getRole());
+        if (role == null) {
+            return "Student";
+        }
+        return role == UserRole.EDUCATOR ? "Educator" : "Student";
+    }
+
     private StudentProgress progressForProfile(StudentProfile profile) {
         if (profile == null || profile.getEmail() == null) {
             return null;
         }
         String key = profile.getEmail().toLowerCase(Locale.ROOT);
         return progressCache.computeIfAbsent(key, repository::getProgressForEmail);
+    }
+
+    private StudentProgress progressForEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        String key = email.toLowerCase(Locale.ROOT);
+        return progressCache.computeIfAbsent(key, repository::getProgressForEmail);
+    }
+
+    private String displayStudentName(String email) {
+        StudentProgress progress = progressForEmail(email);
+        if (progress != null && progress.getStudentName() != null && !progress.getStudentName().isBlank()) {
+            return progress.getStudentName();
+        }
+        return email != null ? email : "Student";
     }
 
     private void showStudentDetail(StudentProfile profile) {
@@ -453,7 +530,11 @@ public class EducatorDashboardView extends VBox {
         financeTab.setContent(buildFinancialTab(profile));
         financeTab.setClosable(false);
 
-        tabs.getTabs().addAll(overviewTab, learningTab, jobTab, financeTab);
+        Tab activityTab = new Tab("Activity");
+        activityTab.setContent(buildActivityTab(profile, progress));
+        activityTab.setClosable(false);
+
+        tabs.getTabs().addAll(overviewTab, learningTab, jobTab, activityTab, financeTab);
 
         VBox container = new VBox(tabs);
         container.setPrefSize(700, 500);
@@ -570,6 +651,100 @@ public class EducatorDashboardView extends VBox {
         VBox layout = new VBox(16, new Label("Job Application History"), scroll);
         layout.setPadding(new Insets(16));
         return layout;
+    }
+
+    private Node buildActivityTab(StudentProfile profile, StudentProgress progress) {
+        VBox layout = new VBox(12);
+        layout.setPadding(new Insets(16));
+
+        Label header = new Label("Activity Feed");
+        header.getStyleClass().add("section-header");
+
+        int modulesCompleted = progress != null ? progress.getModulesCompleted() : 0;
+        int totalModules = progress != null ? progress.getTotalModules() : 0;
+        int jobsApplied = progress != null ? progress.getEmploymentApplications() : 0;
+        String moduleText = totalModules == 0 ? modulesCompleted + "/" + totalModules : modulesCompleted + "/" + totalModules;
+        String jobText = String.valueOf(jobsApplied);
+        String walletText = progress != null ? "₹" + progress.getWalletSavings() : "₹0";
+
+        HBox metricRow = new HBox(18);
+        metricRow.setAlignment(Pos.CENTER_LEFT);
+        metricRow.getChildren().addAll(
+                createOverviewMetric("Courses Completed", moduleText),
+                createOverviewMetric("Jobs Applied", jobText),
+                createOverviewMetric("Wallet Savings", walletText)
+        );
+
+        ListView<HBox> activityList = new ListView<>();
+        activityList.setPlaceholder(new Label("Loading activity stream..."));
+        activityList.setPrefHeight(260);
+
+        CompletableFuture.runAsync(() -> {
+            List<StudentActivity> activities = repository.fetchStudentActivities(profile.getEmail());
+            Platform.runLater(() -> {
+                activityList.getItems().clear();
+                if (activities.isEmpty()) {
+                    activityList.setPlaceholder(new Label("No recorded activity yet."));
+                } else {
+                    activities.forEach(activity -> activityList.getItems().add(createActivityRow(activity)));
+                }
+            });
+        });
+
+        layout.getChildren().addAll(header, metricRow, activityList);
+        return layout;
+    }
+
+    private HBox createActivityRow(StudentActivity activity) {
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8));
+
+        Label typeLabel = new Label(formatActivityType(activity.getActivityType()));
+        typeLabel.getStyleClass().add("cell-name-bw");
+
+        Label summary = new Label(activity.getSummary());
+        summary.getStyleClass().add("cell-subtext-bw");
+
+        VBox detailBox = new VBox(2);
+        detailBox.getChildren().add(new Label(activity.getActivityType()));
+        if (!activity.getActivityData().isEmpty()) {
+            activity.getActivityData().forEach((key, value) -> {
+                Label detail = new Label(key + ": " + value);
+                detail.getStyleClass().add("cell-subtext-bw");
+                detailBox.getChildren().add(detail);
+            });
+        }
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        String timestamp = activity.getCreatedAt() != null
+                ? activity.getCreatedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a"))
+                : "";
+        Label timeLabel = new Label(timestamp);
+        timeLabel.getStyleClass().add("cell-subtext-bw");
+
+        row.getChildren().addAll(typeLabel, detailBox, spacer, timeLabel);
+        return row;
+    }
+
+    private String formatActivityType(String type) {
+        if (type == null || type.isBlank()) {
+            return "Activity";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String token : type.split("[_\\s]+")) {
+            if (token.isBlank()) {
+                continue;
+            }
+            builder.append(token.substring(0, 1).toUpperCase(Locale.ROOT));
+            if (token.length() > 1) {
+                builder.append(token.substring(1).toLowerCase(Locale.ROOT));
+            }
+            builder.append(" ");
+        }
+        return builder.toString().trim();
     }
 
     private Node buildFinancialTab(StudentProfile profile) {

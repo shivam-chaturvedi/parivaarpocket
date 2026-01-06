@@ -269,17 +269,27 @@ public class WalletModuleView extends VBox {
         expensesValue.setText("₹" + Math.round(expenses));
         savingsValue.setText("₹" + Math.round(savings));
 
-        if (expenses >= income && income > 0) {
+        double remaining = income - expenses;
+        boolean budgetOverflow = (income > 0 && expenses >= income) || (income <= 0 && expenses > 0);
+
+        if (budgetOverflow) {
             budgetAlertLabel.setText("⚠️ Warning: Expenses exceed income.");
             budgetAlertLabel.getStyleClass().add("alert-danger");
 
-            // Log budget overflow activity
             JsonObject activityData = new JsonObject();
             activityData.addProperty("income", income);
             activityData.addProperty("expenses", expenses);
+            activityData.addProperty("remaining", remaining);
             repository.logStudentActivity(user, "budget_overflow", activityData);
+
+            JsonObject alertMetadata = new JsonObject();
+            alertMetadata.addProperty("income", income);
+            alertMetadata.addProperty("expenses", expenses);
+            alertMetadata.addProperty("remaining", remaining);
+            String alertMessage = remaining < 0 ? "Balance is negative after recent entries." : "Expenses have reached your income.";
+            String severity = remaining < 0 ? "danger" : "warning";
+            repository.logAlert(user, "Budget", alertMessage, severity, alertMetadata);
         } else {
-            double remaining = income - expenses;
             budgetAlertLabel.setText("You have ₹" + Math.round(remaining) + " remaining this month.");
             budgetAlertLabel.getStyleClass().remove("alert-danger");
         }

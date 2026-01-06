@@ -30,6 +30,7 @@ com/athena/parivarpocket/ui/EducatorDashboardView$1.class
 com/athena/parivarpocket/ui/MainLayout$1.class
 com/athena/parivarpocket/ui/WalletModuleView.class
 com/athena/parivarpocket/service/OfflineSyncService.class
+com/athena/parivarpocket/model/StudentActivity.class
 com/athena/parivarpocket/ui/LearningModuleView.class
 com/athena/parivarpocket/ui/LoginView$1.class
 com/athena/parivarpocket/model/WalletEntry.class
@@ -47,6 +48,7 @@ com/athena/parivarpocket/model/QuizAttempt.class
 com/athena/parivarpocket/ui/NotificationsView.class
 com/athena/parivarpocket/App.class
 com/athena/parivarpocket/ui/LoginView.class
+com/athena/parivarpocket/model/Alert.class
 com/athena/parivarpocket/ui/EducatorDashboardView$6.class
 com/athena/parivarpocket/model/StudentProgress.class
 com/athena/parivarpocket/ui/SidebarView.class

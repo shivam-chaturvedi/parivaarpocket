@@ -129,6 +129,11 @@ public class DataRepository {
             payload.add(jobToPayload(job));
         }
         JsonArray inserted = supabaseClient.insertRecord("jobs", "on_conflict=id", payload, null);
+        List<JobOpportunity> allJobsFromDb = mapTable("jobs", null, this::toJobOpportunity);
+        if (!allJobsFromDb.isEmpty()) {
+            jobCache = allJobsFromDb;
+            return jobCache;
+        }
         List<JobOpportunity> persisted = parseJobArray(inserted);
         if (!persisted.isEmpty()) {
             jobCache = persisted;
@@ -1072,6 +1077,16 @@ public class DataRepository {
         return fallback;
     }
 
+    private String stringifyElement(JsonElement element) {
+        if (element == null || element.isJsonNull()) {
+            return "";
+        }
+        if (element.isJsonPrimitive()) {
+            return element.getAsJsonPrimitive().getAsString();
+        }
+        return element.toString();
+    }
+
     private List<String> safeStringList(JsonObject json, String key) {
         if (json.has(key) && !json.get(key).isJsonNull()) {
             JsonElement element = json.get(key);
@@ -1164,10 +1179,52 @@ public class DataRepository {
         }
     }
 
+    public void logAlert(User user, String category, String message, String severity, JsonObject metadata) {
+        if (user == null || category == null || category.isBlank() || message == null || message.isBlank()) {
+            return;
+        }
+        JsonObject payload = new JsonObject();
+        payload.addProperty("user_email", user.getEmail().toLowerCase(Locale.ROOT));
+        payload.addProperty("category", category);
+        payload.addProperty("severity", severity != null && !severity.isBlank() ? severity : "info");
+        payload.addProperty("message", message);
+        payload.add("metadata", metadata != null ? metadata : new JsonObject());
+        try {
+            supabaseClient.insertRecord("alerts", null, payload, user.getAccessToken());
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Unable to log alert: " + e.getMessage());
+        }
+    }
+
     public List<JobApplication> fetchJobApplications(String userEmail) {
         String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&activity_type=eq.job_application_event&order=created_at.desc";
         return mapTable("student_activity_logs", query, this::toJobApplicationFromLog, currentUser.getAccessToken());
+    }
+
+    public List<StudentActivity> fetchStudentActivities(String userEmail) {
+        if (userEmail == null || userEmail.isBlank()) {
+            return Collections.emptyList();
+        }
+        String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
+        String query = "user_email=eq." + encoded + "&order=created_at.desc&limit=50";
+        String token = currentUser != null ? currentUser.getAccessToken() : null;
+        return mapTable("student_activity_logs", query, this::toStudentActivity, token);
+    }
+
+    public List<Alert> fetchAlerts(String userEmail) {
+        if (userEmail == null || userEmail.isBlank()) {
+            return Collections.emptyList();
+        }
+        String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
+        String query = "user_email=eq." + encoded + "&order=created_at.desc";
+        String token = currentUser != null ? currentUser.getAccessToken() : null;
+        return mapTable("alerts", query, this::toAlert, token);
+    }
+
+    public List<Alert> fetchAllAlerts() {
+        String token = currentUser != null ? currentUser.getAccessToken() : null;
+        return mapTable("alerts", "order=created_at.desc&limit=100", this::toAlert, token);
     }
 
     private JobApplication toJobApplicationFromLog(JsonObject json) {
@@ -1176,6 +1233,41 @@ public class DataRepository {
                 safeString(json, "id", ""),
                 safeString(data, "job_id", ""),
                 "Submitted", // Activity logs represent point-in-time events
+                safeDateTime(json, "created_at", LocalDateTime.now())
+        );
+    }
+
+    private StudentActivity toStudentActivity(JsonObject json) {
+        JsonObject data = json.has("activity_data") && json.get("activity_data").isJsonObject()
+                ? json.getAsJsonObject("activity_data")
+                : new JsonObject();
+        Map<String, String> details = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : data.entrySet()) {
+            details.put(entry.getKey(), stringifyElement(entry.getValue()));
+        }
+        return new StudentActivity(
+                safeString(json, "id", ""),
+                safeString(json, "activity_type", ""),
+                details,
+                safeDateTime(json, "created_at", LocalDateTime.now())
+        );
+    }
+
+    private Alert toAlert(JsonObject json) {
+        JsonObject data = json.has("metadata") && json.get("metadata").isJsonObject()
+                ? json.getAsJsonObject("metadata")
+                : new JsonObject();
+        Map<String, String> details = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : data.entrySet()) {
+            details.put(entry.getKey(), stringifyElement(entry.getValue()));
+        }
+        return new Alert(
+                safeString(json, "id", ""),
+                safeString(json, "user_email", ""),
+                safeString(json, "category", ""),
+                safeString(json, "severity", "info"),
+                safeString(json, "message", ""),
+                details,
                 safeDateTime(json, "created_at", LocalDateTime.now())
         );
     }
