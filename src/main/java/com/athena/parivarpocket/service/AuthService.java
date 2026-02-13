@@ -25,6 +25,39 @@ public class AuthService {
     private final Gson gson = new Gson();
     private final ProfileService profileService = new ProfileService();
 
+    /**
+     * Unified login or register method. Attempts to login first.
+     * If login fails due to invalid credentials, attempts to register with the selected role.
+     * @param email user email
+     * @param password user password
+     * @param selectedRole role selected by user (only used if account doesn't exist)
+     * @return authenticated User
+     */
+    public User loginOrRegister(String email, String password, UserRole selectedRole) {
+        validateEmail(email);
+        validatePassword(password);
+        if (selectedRole == null) {
+            throw new IllegalArgumentException("Please select a role");
+        }
+
+        try {
+            // First, attempt to login
+            return login(email, password);
+        } catch (IllegalArgumentException e) {
+            // Check if the error is due to invalid credentials (account doesn't exist)
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.toLowerCase().contains("invalid login credentials") 
+                    || errorMsg.toLowerCase().contains("invalid credentials")
+                    || errorMsg.toLowerCase().contains("email not confirmed"))) {
+                // Account doesn't exist or not confirmed, try to register
+                System.out.println("[AuthService] Login failed, attempting registration for: " + email);
+                return register(email, password, selectedRole);
+            }
+            // Re-throw other errors (validation errors, etc.)
+            throw e;
+        }
+    }
+
     public User login(String email, String password) {
         validateEmail(email);
         validatePassword(password);

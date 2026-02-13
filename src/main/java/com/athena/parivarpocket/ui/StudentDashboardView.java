@@ -23,8 +23,10 @@ import java.util.List;
 
 public class StudentDashboardView extends VBox {
     private final DataRepository repository;
+    private final User user;
 
     public StudentDashboardView(User user, DataRepository repository) {
+        this.user = user;
         this.repository = repository;
         setSpacing(24);
         setPadding(new Insets(24));
@@ -34,7 +36,11 @@ public class StudentDashboardView extends VBox {
         long completedCount = lessons.stream().filter(l -> repository.isLessonCompleted(l.getId())).count();
         int modulesCompleted = (int) completedCount;
         
-        int coins = modulesCompleted * 100;
+        int coins = 0;
+        com.athena.parivarpocket.model.StudentProgress progress = repository.getStudentProgress(user.getEmail());
+        if (progress != null) {
+            coins = progress.getParivaarPoints();
+        }
         
         java.util.Map<String, Double> quizStats = repository.getQuizStats(user);
         int maxScore = quizStats.get("max").intValue();
@@ -115,12 +121,19 @@ public class StudentDashboardView extends VBox {
         Label progressLabel = new Label(modulesCompleted + " / " + moduleTotal + " Modules Completed (" + Math.round(progress * 100) + "%)");
         progressLabel.getStyleClass().add("progress-text");
 
+        // Get quizzes taken from student progress for "live" stats
+        int quizzesTaken = 0;
+        com.athena.parivarpocket.model.StudentProgress progressObj = repository.getStudentProgress(this.user.getEmail());
+        if (progressObj != null) {
+            quizzesTaken = progressObj.getQuizzesTaken();
+        }
+        
         HBox stats = new HBox(0,
-                createStatItem("Max Score", maxScore + "%"),
+                createStatItem("Quizzes Taken", String.valueOf(quizzesTaken)),
                 createVerticalSeparator(),
-                createStatItem("Min Score", minScore + "%"),
+                createStatItem("Average Score", medianScore + "%"),
                 createVerticalSeparator(),
-                createStatItem("Median", medianScore + "%")
+                createStatItem("Best Score", maxScore + "%")
         );
         stats.setAlignment(Pos.CENTER);
         
@@ -134,28 +147,48 @@ public class StudentDashboardView extends VBox {
         List<WalletEntry> entries = repository.loadWallet(user);
         double income = repository.calculateIncome(entries);
         double expenses = repository.calculateExpenses(entries);
-        double currentBalance = income - expenses;
+        double totalSavings = repository.calculateTotalSavings(entries);
         
-        Label header = new Label("Wallet Overview");
+        com.athena.parivarpocket.model.BudgetGoal goal = repository.getBudgetGoal(user);
+        double savingsGoal = (goal != null && goal.getTargetSavings() > 0) ? goal.getTargetSavings() : 5000;
+        double budgetLimit = (goal != null && goal.getCurrentBudget() > 0) ? goal.getCurrentBudget() : income;
+
+        Label header = new Label("Wallet Summary");
         header.getStyleClass().add("panel-header");
 
-        Label balanceLabel = new Label("₹" + Math.round(currentBalance));
-        balanceLabel.getStyleClass().add("balance-value");
-        Label balanceTitle = new Label("Current Balance");
-        balanceTitle.getStyleClass().add("balance-title");
+        // Savings Goal Progress
+        Label savingsLabel = new Label("Current Savings Goal Progress");
+        savingsLabel.getStyleClass().add("progress-label");
         
-        VBox balanceBox = new VBox(4, balanceTitle, balanceLabel);
-        balanceBox.setAlignment(Pos.CENTER);
-        balanceBox.setPadding(new Insets(0, 0, 12, 0));
+        double savingsProgress = savingsGoal > 0 ? Math.min(Math.max(totalSavings, 0) / savingsGoal, 1.0) : 0;
+        
+        ProgressBar savingsBar = new ProgressBar(savingsProgress);
+        savingsBar.setMaxWidth(Double.MAX_VALUE);
+        savingsBar.getStyleClass().add("dashboard-progress-bar");
+        
+        Label savingsCount = new Label("₹" + Math.round(totalSavings) + " / ₹" + Math.round(savingsGoal));
+        savingsCount.getStyleClass().add("progress-count");
+        
+        HBox savingsRow = new HBox(12, savingsBar, savingsCount);
+        savingsRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(savingsBar, Priority.ALWAYS);
+
+        // Budget Status Summary
+        double balance = income - expenses;
+        String statusText = balance >= 0 ? "Net Balance: ₹" + Math.round(balance) : "Deficit: ₹" + Math.round(Math.abs(balance));
+        Label statusLabel = new Label(statusText);
+        statusLabel.setStyle(balance >= 0 ? "-fx-text-fill: #2e7d32; -fx-font-weight: bold;" : "-fx-text-fill: #d32f2f; -fx-font-weight: bold;");
 
         HBox stats = new HBox(0,
                 createStatItem("Income", "₹" + Math.round(income)),
                 createVerticalSeparator(),
-                createStatItem("Expenses", "₹" + Math.round(expenses))
+                createStatItem("Expenses", "₹" + Math.round(expenses)),
+                createVerticalSeparator(),
+                createStatItem("Budget", "₹" + Math.round(budgetLimit))
         );
         stats.setAlignment(Pos.CENTER);
         
-        VBox content = new VBox(12, header, balanceBox, stats);
+        VBox content = new VBox(12, header, savingsLabel, savingsRow, statusLabel, stats);
         content.setPadding(new Insets(20));
         content.getStyleClass().add("dashboard-card");
         return content;
@@ -163,10 +196,10 @@ public class StudentDashboardView extends VBox {
 
     private Panel buildBookmarkedJobs(List<JobOpportunity> jobs) {
         if (jobs.isEmpty()) {
-            VBox emptyBox = new VBox(new Label("No recent opportunities. Check the Work tab!"));
+            VBox emptyBox = new VBox(new Label("No bookmarked opportunities. Explore and save jobs from the Work tab!"));
             emptyBox.setPadding(new Insets(24));
             emptyBox.getStyleClass().add("dashboard-card");
-            return new Panel("Recent Opportunities", emptyBox);
+            return new Panel("Bookmarked Opportunities", emptyBox);
         }
         
         VBox list = new VBox(16);
@@ -184,8 +217,8 @@ public class StudentDashboardView extends VBox {
              Region spacer = new Region();
              HBox.setHgrow(spacer, Priority.ALWAYS);
              
-             Button apply = new Button("View");
-             apply.getStyleClass().add("small-button");
+             Button apply = new Button("Apply");
+             apply.getStyleClass().add("apply-button");
              apply.setOnAction(e -> {
                  String indeedLink = "https://in.indeed.com/viewjob?jk=" + job.getId();
                  
@@ -207,7 +240,21 @@ public class StudentDashboardView extends VBox {
                  }
              });
              
-             row.getChildren().addAll(info, spacer, apply);
+             Button remove = new Button("Remove");
+             remove.getStyleClass().add("remove-button");
+             remove.setOnAction(e -> {
+                 User currentUser = repository.getCurrentUser();
+                 if (currentUser != null) {
+                     repository.removeFavoriteJob(currentUser.getId(), job.getId());
+                     // Refresh the dashboard by removing from UI
+                     list.getChildren().remove(row);
+                 }
+             });
+             
+             HBox buttons = new HBox(8, apply, remove);
+             buttons.setAlignment(Pos.CENTER_RIGHT);
+             
+             row.getChildren().addAll(info, spacer, buttons);
              list.getChildren().add(row);
         });
         

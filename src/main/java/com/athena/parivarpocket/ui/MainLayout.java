@@ -52,13 +52,30 @@ public class MainLayout {
     private Node buildScrollableContent(MainTab tab) {
         String title = titleFor(tab);
         String desc = descriptionFor(tab);
-        VBox container = new VBox(18, new PageHeader(title, desc), contentForTab(tab));
+        
+        // Only show refresh button for Dashboard and Learning
+        Runnable refreshAction = null;
+        if (tab == MainTab.DASHBOARD || tab == MainTab.LEARNING) {
+            refreshAction = () -> triggerManualRefresh(user);
+        }
+
+        VBox container = new VBox(18, new PageHeader(title, desc, refreshAction), contentForTab(tab));
         container.setPadding(new Insets(16, 24, 24, 24));
         ScrollPane scrollPane = new ScrollPane(container);
         scrollPane.setFitToWidth(true);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.getStyleClass().add("content-scroll");
         return scrollPane;
+    }
+
+    private void triggerManualRefresh(User user) {
+        // Clear caches to force fetch
+        tabContentCache.clear();
+        
+        CompletableFuture.runAsync(() -> {
+            repository.prefetchAll(user);
+            Platform.runLater(this::refreshContent);
+        });
     }
 
     private String titleFor(MainTab tab) {
@@ -92,14 +109,19 @@ public class MainLayout {
     private final java.util.Map<MainTab, Node> tabContentCache = new java.util.EnumMap<>(MainTab.class);
 
     private Node contentForTab(MainTab tab) {
+        // Special case: Always refresh Student Dashboard to show latest bookmarked jobs
+        if (tab == MainTab.DASHBOARD && user.getRole() == UserRole.STUDENT) {
+            Node dashboard = new StudentDashboardView(user, repository);
+            tabContentCache.put(tab, dashboard);
+            return dashboard;
+        }
+
         if (tabContentCache.containsKey(tab)) {
             return tabContentCache.get(tab);
         }
 
         Node content = switch (tab) {
-            case DASHBOARD -> user.getRole() == UserRole.STUDENT
-                    ? new StudentDashboardView(user, repository)
-                    : new EducatorDashboardView(repository);
+            case DASHBOARD -> new EducatorDashboardView(repository);
             case LEARNING -> new LearningModuleView(repository);
             case WORK -> new WorkModuleView(repository);
             case WALLET -> new WalletModuleView(repository, user, offlineSyncService);

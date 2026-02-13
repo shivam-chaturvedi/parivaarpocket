@@ -33,6 +33,7 @@ public class DataRepository {
     private volatile Map<String, BudgetGoal> budgetGoalCache = Map.of();
     private volatile List<String> favoriteIdsCache = List.of();
     private volatile List<JobOpportunity> favoriteJobsCache = List.of();
+    private final Set<String> rewardedQuestionsCache = Collections.synchronizedSet(new HashSet<>());
     private User currentUser;
 
     public DataRepository(LocalStoreService storeService) {
@@ -58,6 +59,7 @@ public class DataRepository {
         if (user != null) {
             this.favoriteIdsCache = fetchFavoriteJobIdsFromSupabase(user);
             this.favoriteJobsCache = fetchFavoriteJobsFromSupabase(user);
+            fetchQuizRewardsFromSupabase(user);
         }
 
         if (notificationsCache.isEmpty()) {
@@ -128,7 +130,7 @@ public class DataRepository {
             }
             payload.add(jobToPayload(job));
         }
-        JsonArray inserted = supabaseClient.insertRecord("jobs", "on_conflict=id", payload, null);
+        JsonArray inserted = safeInsertRecord("jobs", "on_conflict=id", payload, null);
         List<JobOpportunity> allJobsFromDb = mapTable("jobs", null, this::toJobOpportunity);
         if (!allJobsFromDb.isEmpty()) {
             jobCache = allJobsFromDb;
@@ -240,6 +242,9 @@ public class DataRepository {
                 progress.getAlerts()
         );
         
+        // Optimistically update local cache so UI is "live"
+        cacheStudentProgress(updated);
+        
         if (updateStudentProgress(updated)) {
             // Add wallet entry as income
             addWalletEntry(user, new WalletEntry(
@@ -250,20 +255,18 @@ public class DataRepository {
                 LocalDate.now()
             ));
 
-            // Refresh cache
-            studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
+            // Refresh cache from server to stay in sync if possible
+            try {
+                List<StudentProgress> refreshed = mapTable("student_progress", null, this::toStudentProgress);
+                if (refreshed != null && !refreshed.isEmpty()) {
+                    studentProgressCache = refreshed;
+                }
+            } catch (Exception e) {
+                System.err.println("[DataRepository] Failed to refresh student progress cache: " + e.getMessage());
+            }
         }
     }
 
-    public StudentProgress getStudentProgress(String email) {
-        if (studentProgressCache == null) {
-            studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
-        }
-        return studentProgressCache.stream()
-                .filter(p -> p.getUserEmail().equalsIgnoreCase(email))
-                .findFirst()
-                .orElse(null);
-    }
 
     public boolean createLessonWithQuiz(String lessonTitle,
                                         String difficulty,
@@ -312,10 +315,11 @@ public class DataRepository {
             responses.forEach(responseArray::add);
         }
         payload.add("responses", responseArray);
-        JsonArray inserted = supabaseClient.insertRecord("quiz_attempts", null, payload, user.getAccessToken());
+        JsonArray inserted = safeInsertRecord("quiz_attempts", null, payload, user.getAccessToken());
         if (inserted != null && !inserted.isEmpty()) {
             QuizAttempt attempt = toQuizAttempt(inserted.get(0).getAsJsonObject());
             cacheQuizAttempt(attempt);
+            syncStudentProgress(user); // Force sync aggregate stats
             return attempt;
         }
         return null;
@@ -329,10 +333,11 @@ public class DataRepository {
         payload.addProperty("lesson_id", lesson.getId());
         payload.addProperty("user_email", user.getEmail().toLowerCase(Locale.ROOT));
         payload.addProperty("quiz_attempt_id", attempt.getId());
-        JsonArray inserted = supabaseClient.insertRecord("lesson_completions", null, payload, user.getAccessToken());
+        JsonArray inserted = safeInsertRecord("lesson_completions", null, payload, user.getAccessToken());
         if (inserted != null && !inserted.isEmpty()) {
             LessonCompletion completion = toLessonCompletion(inserted.get(0).getAsJsonObject());
             cacheLessonCompletion(completion);
+            syncStudentProgress(user); // Force sync aggregate stats
             return completion;
         }
         return null;
@@ -363,7 +368,7 @@ public class DataRepository {
         payload.addProperty("user_email", user.getEmail().toLowerCase(Locale.ROOT));
         payload.addProperty("current_budget", currentBudget);
         payload.addProperty("target_savings", targetSavings);
-        JsonArray inserted = supabaseClient.insertRecord("budget_goals", "on_conflict=user_email", payload, user.getAccessToken());
+        JsonArray inserted = safeInsertRecord("budget_goals", "on_conflict=user_email", payload, user.getAccessToken());
         if (inserted != null && !inserted.isEmpty()) {
             BudgetGoal goal = toBudgetGoal(inserted.get(0).getAsJsonObject());
             cacheBudgetGoal(goal);
@@ -377,6 +382,42 @@ public class DataRepository {
             return goal;
         }
         return null;
+    }
+
+    public boolean isQuestionRewarded(User user, String questionId) {
+        if (user == null || questionId == null) return true; // Fail safe to avoid double rewards
+        return rewardedQuestionsCache.contains(questionId);
+    }
+
+    public void markQuestionRewarded(User user, String questionId) {
+        if (user == null || questionId == null) return;
+        
+        JsonObject payload = new JsonObject();
+        payload.addProperty("user_email", user.getEmail().toLowerCase(Locale.ROOT));
+        payload.addProperty("question_id", questionId);
+        
+        JsonArray inserted = safeInsertRecord("quiz_rewards", null, payload, user.getAccessToken());
+        if (inserted != null && !inserted.isEmpty()) {
+            rewardedQuestionsCache.add(questionId);
+        }
+    }
+
+    private void fetchQuizRewardsFromSupabase(User user) {
+        if (user == null) return;
+        try {
+            String query = "select=question_id&user_email=eq." + user.getEmail().toLowerCase(Locale.ROOT);
+            JsonArray data = supabaseClient.fetchTable("quiz_rewards", query, user.getAccessToken());
+            rewardedQuestionsCache.clear();
+            if (data != null) {
+                for (JsonElement e : data) {
+                    if (e.isJsonObject() && e.getAsJsonObject().has("question_id")) {
+                        rewardedQuestionsCache.add(e.getAsJsonObject().get("question_id").getAsString());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Failed to fetch quiz rewards: " + e.getMessage());
+        }
     }
 
     public List<StudentProgress> getStudentsProgress() {
@@ -445,6 +486,13 @@ public class DataRepository {
                 .sum();
     }
 
+    public double calculateTotalSavings(List<WalletEntry> entries) {
+        return entries.stream()
+                .filter(e -> e.getType() == WalletEntryType.SAVINGS)
+                .mapToDouble(WalletEntry::getAmount)
+                .sum();
+    }
+
     public Map<String, Double> categoryBreakdown(List<WalletEntry> entries) {
         return entries.stream()
                 .filter(e -> e.getType() == WalletEntryType.EXPENSE)
@@ -486,7 +534,7 @@ public class DataRepository {
         payload.addProperty("difficulty", difficulty);
         payload.addProperty("description", description);
         payload.addProperty("course_url", courseUrl);
-        JsonArray inserted = supabaseClient.insertRecord("lessons", null, payload, user.getAccessToken());
+        JsonArray inserted = safeInsertRecord("lessons", null, payload, user.getAccessToken());
         if (inserted != null && !inserted.isEmpty()) {
             Lesson created = toLesson(inserted.get(0).getAsJsonObject());
             cacheLesson(created);
@@ -507,7 +555,7 @@ public class DataRepository {
         payload.addProperty("difficulty", difficulty);
         payload.addProperty("passing_marks", passingMarks);
         payload.addProperty("total_marks", totalMarks);
-        JsonArray inserted = supabaseClient.insertRecord("quizzes", null, payload, user.getAccessToken());
+        JsonArray inserted = safeInsertRecord("quizzes", null, payload, user.getAccessToken());
         if (inserted != null && !inserted.isEmpty()) {
             QuizDefinition quiz = toQuizDefinition(inserted.get(0).getAsJsonObject());
             cacheQuizDefinition(quiz);
@@ -528,7 +576,7 @@ public class DataRepository {
         payload.add("options", toJsonArray(options));
         payload.addProperty("correct_option", correctOption);
         payload.addProperty("points", points);
-        JsonArray inserted = supabaseClient.insertRecord("quiz_questions", null, payload, user.getAccessToken());
+        JsonArray inserted = safeInsertRecord("quiz_questions", null, payload, user.getAccessToken());
         if (inserted != null && !inserted.isEmpty()) {
             QuizQuestion quizQuestion = toQuizQuestion(inserted.get(0).getAsJsonObject());
             cacheQuizQuestion(quizQuestion);
@@ -545,7 +593,7 @@ public class DataRepository {
         payload.addProperty("amount", entry.getAmount());
         payload.addProperty("note", entry.getNote());
         payload.addProperty("entry_date", entry.getDate().toString());
-        supabaseClient.insertRecord("wallet_entries", null, payload, user.getAccessToken());
+        safeInsertRecord("wallet_entries", null, payload, user.getAccessToken());
     }
 
     private void cacheLesson(Lesson lesson) {
@@ -739,7 +787,7 @@ public class DataRepository {
 
             if (existing != null && !existing.isEmpty()) {
                 String idToRemove = existing.get(0).getAsJsonObject().get("id").getAsString();
-                supabaseClient.deleteRecord("job_favorites", idToRemove, null);
+                supabaseClient.deleteRecord("job_favorites", "id=eq." + idToRemove, null);
                 
                 // Update caches
                 List<String> updatedIds = new ArrayList<>(favoriteIdsCache);
@@ -753,7 +801,7 @@ public class DataRepository {
                 JsonObject fav = new JsonObject();
                 fav.addProperty("user_email", user.getEmail());
                 fav.addProperty("job_id", jobId);
-                JsonArray result = supabaseClient.insertRecord("job_favorites", null, fav, null);
+                JsonArray result = safeInsertRecord("job_favorites", null, fav, null);
                 
                 // Update caches
                 List<String> updatedIds = new ArrayList<>(favoriteIdsCache);
@@ -803,6 +851,32 @@ public class DataRepository {
 
     public List<JobOpportunity> fetchFavoriteJobs(User user) {
         return favoriteJobsCache;
+    }
+
+    public void removeFavoriteJob(String userId, String jobId) {
+        User user = getCurrentUser();
+        if (user == null || jobId == null) return;
+        try {
+            // Check if the job is favorited and remove it
+            String query = "user_email=eq." + user.getEmail() + "&job_id=eq." + jobId;
+            JsonArray existing = supabaseClient.fetchTable("job_favorites", query, null);
+
+            if (existing != null && !existing.isEmpty()) {
+                String idToRemove = existing.get(0).getAsJsonObject().get("id").getAsString();
+                supabaseClient.deleteRecord("job_favorites", "id=eq." + idToRemove, null);
+                
+                // Update caches
+                List<String> updatedIds = new ArrayList<>(favoriteIdsCache);
+                updatedIds.remove(jobId);
+                this.favoriteIdsCache = List.copyOf(updatedIds);
+                
+                List<JobOpportunity> updatedJobs = new ArrayList<>(favoriteJobsCache);
+                updatedJobs.removeIf(j -> j.getId().equals(jobId));
+                this.favoriteJobsCache = List.copyOf(updatedJobs);
+            }
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Remove favorite failed: " + e.getMessage());
+        }
     }
 
     private List<JobOpportunity> fetchFavoriteJobsFromSupabase(User user) {
@@ -914,18 +988,69 @@ public class DataRepository {
     }
 
     public StudentProgress getProgressForEmail(String email) {
-        if (email == null || email.isBlank()) {
-            return null;
+        return getStudentProgress(email);
+    }
+
+    public StudentProgress getStudentProgress(String email) {
+        if (email == null) return null;
+        if (studentProgressCache == null || studentProgressCache.isEmpty()) {
+            studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
         }
+        
         String normalized = email.toLowerCase(Locale.ROOT);
-        if (studentProgressCache != null) {
-            for (StudentProgress progress : studentProgressCache) {
-                if (normalized.equals(progress.getUserEmail().toLowerCase(Locale.ROOT))) {
-                    return progress;
-                }
+        StudentProgress progress = null;
+        for (StudentProgress p : studentProgressCache) {
+            if (normalized.equals(p.getUserEmail().toLowerCase(Locale.ROOT))) {
+                progress = p;
+                break;
             }
         }
-        return fetchStudentProgressRecord(normalized);
+        
+        if (progress == null) {
+            progress = fetchStudentProgressRecord(normalized);
+        }
+        
+        // If still null or we want to ensure "live/persistent" stats even if student_progress is broken:
+        // Derive key metrics from working tables (wallet_entries and quiz_attempts)
+        List<WalletEntry> wallet = fetchWalletByEmail(normalized);
+        int totalCoins = (int) wallet.stream()
+                .filter(e -> e.getType() == WalletEntryType.INCOME && "Education".equalsIgnoreCase(e.getCategory()))
+                .mapToDouble(WalletEntry::getAmount)
+                .sum();
+                
+        List<QuizAttempt> attempts = fetchQuizAttemptsByEmail(normalized);
+        int quizzesTaken = attempts.size();
+        
+        double avgScore = attempts.stream()
+                .mapToDouble(a -> (double) a.getScore() / Math.max(a.getMaxScore(), 1) * 100)
+                .average()
+                .orElse(0.0);
+                
+        List<LessonCompletion> completions = fetchLessonCompletionsByEmail(normalized);
+        int modulesCompleted = completions.size();
+
+        if (progress == null) {
+            progress = new StudentProgress("Student", normalized, modulesCompleted, getLessons().size(), quizzesTaken, avgScore, 0, totalCoins, 0, 0, 0, 0);
+        } else {
+            // Override with derived values to ensure they are always "live" and persistent
+            progress = new StudentProgress(
+                    progress.getStudentName(),
+                    progress.getUserEmail(),
+                    modulesCompleted,
+                    getLessons().size(),
+                    quizzesTaken,
+                    avgScore,
+                    progress.getWalletHealthScore(),
+                    totalCoins,
+                    progress.getEmploymentApplications(),
+                    progress.getJobSaves(),
+                    progress.getWalletSavings(),
+                    progress.getAlerts()
+            );
+        }
+        
+        cacheStudentProgress(progress);
+        return progress;
     }
 
     private StudentProgress fetchStudentProgressRecord(String email) {
@@ -1173,7 +1298,7 @@ public class DataRepository {
         try {
             // Using a simple insert; if we want it to be "instant" we could run it on the same thread 
             // but the user wants it to be recorded *before* the external link opens.
-            supabaseClient.insertRecord("student_activity_logs", null, payload, user.getAccessToken());
+            safeInsertRecord("student_activity_logs", null, payload, user.getAccessToken());
         } catch (Exception e) {
             System.err.println("[DataRepository] Unable to log student activity: " + e.getMessage());
         }
@@ -1190,7 +1315,7 @@ public class DataRepository {
         payload.addProperty("message", message);
         payload.add("metadata", metadata != null ? metadata : new JsonObject());
         try {
-            supabaseClient.insertRecord("alerts", null, payload, user.getAccessToken());
+            safeInsertRecord("alerts", null, payload, user.getAccessToken());
         } catch (Exception e) {
             System.err.println("[DataRepository] Unable to log alert: " + e.getMessage());
         }
@@ -1290,7 +1415,81 @@ public class DataRepository {
         payload.addProperty("alerts", progress.getAlerts());
 
         // Upsert based on user_email
-        JsonArray inserted = supabaseClient.insertRecord("student_progress", "on_conflict=user_email", payload, currentUser.getAccessToken());
+        JsonArray inserted = safeInsertRecord("student_progress", "on_conflict=user_email", payload, currentUser.getAccessToken());
         return inserted != null && !inserted.isEmpty();
+    }
+    public void syncStudentProgress(User user) {
+        if (user == null || user.getEmail() == null) return;
+        
+        List<QuizAttempt> attempts = fetchQuizAttempts(user);
+        List<LessonCompletion> completions = fetchLessonCompletions(user);
+        StudentProgress current = getStudentProgress(user.getEmail());
+        
+        if (current == null) {
+            current = new StudentProgress(user.getName(), user.getEmail(), 0, getLessons().size(), 0, 0, 0, 0, 0, 0, 0, 0);
+        }
+        
+        int quizzesTaken = attempts.size();
+        double avgScore = attempts.stream()
+                .mapToDouble(a -> (double) a.getScore() / Math.max(a.getMaxScore(), 1) * 100)
+                .average()
+                .orElse(0.0);
+        
+        int modulesCompleted = completions.size();
+        
+        StudentProgress updated = new StudentProgress(
+                current.getStudentName(),
+                current.getUserEmail(),
+                modulesCompleted,
+                getLessons().size(),
+                quizzesTaken,
+                avgScore,
+                current.getWalletHealthScore(),
+                current.getParivaarPoints(),
+                current.getEmploymentApplications(),
+                current.getJobSaves(),
+                current.getWalletSavings(),
+                current.getAlerts()
+        );
+        
+        // Optimistically update local cache
+        cacheStudentProgress(updated);
+        
+        if (updateStudentProgress(updated)) {
+            // Refresh cache from server safely
+            try {
+                List<StudentProgress> refreshed = mapTable("student_progress", null, this::toStudentProgress);
+                if (refreshed != null && !refreshed.isEmpty()) {
+                    studentProgressCache = refreshed;
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void cacheStudentProgress(StudentProgress progress) {
+        if (progress == null || progress.getUserEmail() == null) return;
+        List<StudentProgress> list = new ArrayList<>(studentProgressCache != null ? studentProgressCache : List.of());
+        String email = progress.getUserEmail().toLowerCase(Locale.ROOT);
+        list.removeIf(p -> email.equals(p.getUserEmail().toLowerCase(Locale.ROOT)));
+        list.add(progress);
+        studentProgressCache = List.copyOf(list);
+    }
+
+    private JsonArray safeInsertRecord(String table, String queryParams, JsonElement payload, String token) {
+        try {
+            return supabaseClient.insertRecord(table, queryParams, payload, token);
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Error inserting into " + table + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    private JsonArray safeUpdateRecord(String table, String queryParams, JsonElement payload, String token) {
+        try {
+            return supabaseClient.updateRecord(table, queryParams, payload, token);
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Error updating " + table + ": " + e.getMessage());
+            return null;
+        }
     }
 }

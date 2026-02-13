@@ -1,0 +1,19 @@
+# Build outputs
+build/
+build/**
+target/
+*.jar
+*.zip
+
+# macOS
+*.dmg
+*.app
+.DS_Store
+
+# Windows
+*.msi
+*.exe
+
+# Courses
+courses/
+courses/**

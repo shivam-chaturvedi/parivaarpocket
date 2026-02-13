@@ -41,10 +41,13 @@ public class SupabaseClient {
         HttpRequest request = builder.build();
 
         try {
+            System.out.println("[SupabaseClient] Fetching table: " + table);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
+                System.err.println("[SupabaseClient] Error fetching " + table + ": " + response.body());
                 throw new IllegalStateException("Supabase table fetch failed (" + table + "): " + response.body());
             }
+            System.out.println("[SupabaseClient] Successfully fetched " + table);
             return parseArray(response.body());
         } catch (IOException e) {
             throw new IllegalStateException("Unable to reach Supabase for table " + table, e);
@@ -106,6 +109,37 @@ public class SupabaseClient {
             return parseArray(response.body());
         } catch (IOException e) {
             throw new IllegalStateException("Unable to reach Supabase for table " + table, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Supabase request was interrupted", e);
+        }
+    }
+
+    public JsonArray updateRecord(String table, String queryParams, JsonElement payload, String bearerToken) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(buildWriteUri(table, queryParams)))
+                .header("apikey", API_KEY)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .header("Prefer", "resolution=merge-duplicates,return=representation");
+        
+        builder.method("PATCH", HttpRequest.BodyPublishers.ofString(gson.toJson(payload)));
+        
+        if (bearerToken != null && !bearerToken.isBlank()) {
+            builder.header("Authorization", "Bearer " + bearerToken);
+        } else {
+            builder.header("Authorization", "Bearer " + API_KEY);
+        }
+        
+        HttpRequest request = builder.build();
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                throw new IllegalStateException("Supabase update failed (" + table + "): " + response.body());
+            }
+            return parseArray(response.body());
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to reach Supabase for updating table " + table, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Supabase request was interrupted", e);

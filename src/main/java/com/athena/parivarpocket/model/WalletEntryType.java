@@ -5,7 +5,8 @@ import java.util.Locale;
 public enum WalletEntryType {
     INCOME,
     EXPENSE,
-    SAVINGS
+    SAVINGS,
+    BUDGET
 
     ;
 
@@ -16,6 +17,7 @@ public enum WalletEntryType {
         return switch (value.trim().toLowerCase(Locale.ROOT)) {
             case "income" -> INCOME;
             case "savings" -> SAVINGS;
+            case "budget" -> BUDGET;
             default -> EXPENSE;
         };
     }

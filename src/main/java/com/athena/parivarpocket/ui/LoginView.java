@@ -18,7 +18,6 @@ import java.util.function.Consumer;
 public class LoginView {
     private final BorderPane root = new BorderPane();
     private final AuthService authService;
-    private boolean registering = false;
 
     public LoginView(AuthService authService, Consumer<User> onLogin) {
         this.authService = authService;
@@ -92,22 +91,9 @@ public class LoginView {
         errorLabel.getStyleClass().add("danger");
         errorLabel.setVisible(false);
 
-        Button submitButton = new Button();
+        Button submitButton = new Button("Submit");
         submitButton.getStyleClass().add("primary-button");
         submitButton.setMaxWidth(Double.MAX_VALUE);
-
-        Button switchButton = new Button();
-        switchButton.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-text-fill: #000000;");
-        switchButton.setOnAction(e -> {
-            registering = !registering;
-            submitButton.setText(registering ? "Create account" : "Sign in");
-            switchButton.setText(registering ? "Back to sign in" : "New here? Create account");
-            errorLabel.setVisible(false);
-            updateRoleSelectionVisibility(roleLabel, roleBox);
-        });
-
-        submitButton.setText("Sign in");
-        switchButton.setText("New here? Create account");
 
         ProgressIndicator loader = new ProgressIndicator();
         loader.setPrefSize(24, 24);
@@ -122,7 +108,6 @@ public class LoginView {
 
         Consumer<Boolean> toggleLoading = isLoading -> {
             submitButton.setDisable(isLoading);
-            switchButton.setDisable(isLoading);
             studentBtn.setDisable(isLoading);
             educatorBtn.setDisable(isLoading);
             emailField.setDisable(isLoading);
@@ -139,16 +124,12 @@ public class LoginView {
             toggleLoading.accept(true);
             String email = emailField.getText().trim();
             String password = passwordField.getText();
-            boolean targetRegistering = registering;
+            UserRole selectedRole = (UserRole) roleGroup.getSelectedToggle().getUserData();
             
             Task<User> authTask = new Task<>() {
                 @Override
                 protected User call() throws Exception {
-                    // Simulate network delay for "buffering" effect if local
-                    if (targetRegistering) {
-                        return authService.register(email, password, (UserRole) roleGroup.getSelectedToggle().getUserData());
-                    }
-                    return authService.login(email, password);
+                    return authService.loginOrRegister(email, password, selectedRole);
                 }
             };
 
@@ -185,7 +166,7 @@ public class LoginView {
         grid.add(passwordLabel, 0, 2);
         grid.add(passwordField, 1, 2);
 
-        Label formTitle = new Label("Sign In");
+        Label formTitle = new Label("ParivaarPocket");
         formTitle.setStyle("-fx-font-size: 24px; -fx-font-weight: 700; -fx-text-fill: #000000;");
 
         VBox fieldsBox = new VBox(12, grid);
@@ -195,14 +176,12 @@ public class LoginView {
                 formTitle,
                 fieldsBox,
                 submitButton,
-                switchButton,
                 errorLabel,
                 loaderRow);
         formBox.setPadding(new Insets(40, 40, 40, 40));
         formBox.setMaxWidth(460);
         formBox.setAlignment(Pos.CENTER);
 
-        updateRoleSelectionVisibility(roleLabel, roleBox);
         Panel panel = new Panel(null, formBox);
         panel.setPrefWidth(500);
         panel.setMinWidth(500);
@@ -219,13 +198,7 @@ public class LoginView {
         alert.showAndWait();
     }
 
-    private void updateRoleSelectionVisibility(Label roleLabel, HBox roleBox) {
-        boolean visible = registering;
-        roleLabel.setVisible(visible);
-        roleLabel.setManaged(visible);
-        roleBox.setVisible(visible);
-        roleBox.setManaged(visible);
-    }
+
 
     private Node buildIllustrationPanel() {
         Image image = new Image(App.class.getResource("/login.png").toExternalForm(), 200, 200, true, true);
