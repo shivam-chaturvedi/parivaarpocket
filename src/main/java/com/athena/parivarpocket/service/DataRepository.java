@@ -534,7 +534,8 @@ public class DataRepository {
         payload.addProperty("difficulty", difficulty);
         payload.addProperty("description", description);
         payload.addProperty("course_url", courseUrl);
-        JsonArray inserted = safeInsertRecord("lessons", null, payload, user.getAccessToken());
+        String token = user != null ? user.getAccessToken() : getSafeToken();
+        JsonArray inserted = safeInsertRecord("lessons", null, payload, token);
         if (inserted != null && !inserted.isEmpty()) {
             Lesson created = toLesson(inserted.get(0).getAsJsonObject());
             cacheLesson(created);
@@ -555,7 +556,8 @@ public class DataRepository {
         payload.addProperty("difficulty", difficulty);
         payload.addProperty("passing_marks", passingMarks);
         payload.addProperty("total_marks", totalMarks);
-        JsonArray inserted = safeInsertRecord("quizzes", null, payload, user.getAccessToken());
+        String token = user != null ? user.getAccessToken() : getSafeToken();
+        JsonArray inserted = safeInsertRecord("quizzes", null, payload, token);
         if (inserted != null && !inserted.isEmpty()) {
             QuizDefinition quiz = toQuizDefinition(inserted.get(0).getAsJsonObject());
             cacheQuizDefinition(quiz);
@@ -576,7 +578,8 @@ public class DataRepository {
         payload.add("options", toJsonArray(options));
         payload.addProperty("correct_option", correctOption);
         payload.addProperty("points", points);
-        JsonArray inserted = safeInsertRecord("quiz_questions", null, payload, user.getAccessToken());
+        String token = user != null ? user.getAccessToken() : getSafeToken();
+        JsonArray inserted = safeInsertRecord("quiz_questions", null, payload, token);
         if (inserted != null && !inserted.isEmpty()) {
             QuizQuestion quizQuestion = toQuizQuestion(inserted.get(0).getAsJsonObject());
             cacheQuizQuestion(quizQuestion);
@@ -593,7 +596,8 @@ public class DataRepository {
         payload.addProperty("amount", entry.getAmount());
         payload.addProperty("note", entry.getNote());
         payload.addProperty("entry_date", entry.getDate().toString());
-        safeInsertRecord("wallet_entries", null, payload, user.getAccessToken());
+        String token = user != null ? user.getAccessToken() : getSafeToken();
+        safeInsertRecord("wallet_entries", null, payload, token);
     }
 
     private void cacheLesson(Lesson lesson) {
@@ -966,8 +970,21 @@ public class DataRepository {
     public List<WalletEntry> fetchWalletByEmail(String userEmail) {
         if (userEmail == null || userEmail.isEmpty()) return Collections.emptyList();
         String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
-        String query = "user_email=eq." + encoded + "&order=created_at.desc";
-        return mapTable("wallet_entries", query, this::toWalletEntry, currentUser.getAccessToken());
+        // Correct column name is owner_email according to migration 010
+        String query = "owner_email=eq." + encoded + "&order=created_at.desc";
+        return mapTable("wallet_entries", query, this::toWalletEntry, getSafeToken());
+    }
+
+    public List<WalletEntry> fetchWalletEntries(User user) {
+        if (user == null || user.getEmail() == null) return Collections.emptyList();
+        String encoded = URLEncoder.encode(user.getEmail().toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
+        String query = "owner_email=eq." + encoded + "&order=entry_date.desc";
+        String token = user.getAccessToken();
+        return mapTable("wallet_entries", query, this::toWalletEntry, token);
+    }
+
+    private String getSafeToken() {
+        return currentUser != null ? currentUser.getAccessToken() : null;
     }
 
     private StudentProgress toStudentProgress(JsonObject json) {
@@ -1066,7 +1083,8 @@ public class DataRepository {
         }
         String encoded = URLEncoder.encode(user.getEmail().toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&order=completed_at.desc";
-        return mapTable("lesson_completions", query, this::toLessonCompletion, user.getAccessToken());
+        String token = user.getAccessToken();
+        return mapTable("lesson_completions", query, this::toLessonCompletion, token);
     }
 
     public List<LessonCompletion> fetchLessonCompletionsByEmail(String userEmail) {
@@ -1075,9 +1093,9 @@ public class DataRepository {
         }
         String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&order=completed_at.desc";
-        String token = currentUser != null ? currentUser.getAccessToken() : null;
-        return mapTable("lesson_completions", query, this::toLessonCompletion, token);
+        return mapTable("lesson_completions", query, this::toLessonCompletion, getSafeToken());
     }
+
 
     private List<QuizAttempt> fetchQuizAttempts(User user) {
         if (user == null || user.getEmail() == null) {
@@ -1085,7 +1103,8 @@ public class DataRepository {
         }
         String encoded = URLEncoder.encode(user.getEmail().toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&order=created_at.desc";
-        return mapTable("quiz_attempts", query, this::toQuizAttempt, user.getAccessToken());
+        String token = user.getAccessToken();
+        return mapTable("quiz_attempts", query, this::toQuizAttempt, token);
     }
 
     public List<QuizAttempt> fetchQuizAttemptsByEmail(String userEmail) {
@@ -1094,8 +1113,7 @@ public class DataRepository {
         }
         String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&order=created_at.desc";
-        String token = currentUser != null ? currentUser.getAccessToken() : null;
-        return mapTable("quiz_attempts", query, this::toQuizAttempt, token);
+        return mapTable("quiz_attempts", query, this::toQuizAttempt, getSafeToken());
     }
 
     private void cacheLessonCompletion(LessonCompletion completion) {
@@ -1324,7 +1342,7 @@ public class DataRepository {
     public List<JobApplication> fetchJobApplications(String userEmail) {
         String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&activity_type=eq.job_application_event&order=created_at.desc";
-        return mapTable("student_activity_logs", query, this::toJobApplicationFromLog, currentUser.getAccessToken());
+        return mapTable("student_activity_logs", query, this::toJobApplicationFromLog, getSafeToken());
     }
 
     public List<StudentActivity> fetchStudentActivities(String userEmail) {
@@ -1333,8 +1351,7 @@ public class DataRepository {
         }
         String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&order=created_at.desc&limit=50";
-        String token = currentUser != null ? currentUser.getAccessToken() : null;
-        return mapTable("student_activity_logs", query, this::toStudentActivity, token);
+        return mapTable("student_activity_logs", query, this::toStudentActivity, getSafeToken());
     }
 
     public List<Alert> fetchAlerts(String userEmail) {
@@ -1343,13 +1360,11 @@ public class DataRepository {
         }
         String encoded = URLEncoder.encode(userEmail.toLowerCase(Locale.ROOT), StandardCharsets.UTF_8);
         String query = "user_email=eq." + encoded + "&order=created_at.desc";
-        String token = currentUser != null ? currentUser.getAccessToken() : null;
-        return mapTable("alerts", query, this::toAlert, token);
+        return mapTable("alerts", query, this::toAlert, getSafeToken());
     }
 
     public List<Alert> fetchAllAlerts() {
-        String token = currentUser != null ? currentUser.getAccessToken() : null;
-        return mapTable("alerts", "order=created_at.desc&limit=100", this::toAlert, token);
+        return mapTable("alerts", "order=created_at.desc&limit=100", this::toAlert, getSafeToken());
     }
 
     private JobApplication toJobApplicationFromLog(JsonObject json) {
@@ -1415,7 +1430,7 @@ public class DataRepository {
         payload.addProperty("alerts", progress.getAlerts());
 
         // Upsert based on user_email
-        JsonArray inserted = safeInsertRecord("student_progress", "on_conflict=user_email", payload, currentUser.getAccessToken());
+        JsonArray inserted = safeInsertRecord("student_progress", "on_conflict=user_email", payload, getSafeToken());
         return inserted != null && !inserted.isEmpty();
     }
     public void syncStudentProgress(User user) {
