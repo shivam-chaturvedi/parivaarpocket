@@ -23,6 +23,10 @@ import javafx.scene.chart.*;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -34,6 +38,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import javafx.stage.FileChooser;
 
 public class EducatorDashboardView extends VBox {
     private final DataRepository repository;
@@ -51,43 +56,101 @@ public class EducatorDashboardView extends VBox {
     public EducatorDashboardView(DataRepository repository) {
         this.repository = repository;
 
-        setSpacing(24);
+        setSpacing(20);
         setFillWidth(true);
         setPadding(new Insets(24));
+        setStyle("-fx-background-color: white;");
         getStyleClass().add("dashboard-container");
 
+        // 1. Top Title
         Label title = new Label("Educator Dashboard");
-        title.getStyleClass().add("dashboard-title");
+        title.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: black;");
+        
         Label subtitle = new Label("Overview of your progress and activities");
-        subtitle.getStyleClass().add("dashboard-subtitle");
-        getChildren().addAll(title, subtitle);
+        subtitle.setStyle("-fx-font-size: 14px; -fx-text-fill: #666;");
+        
+        // 2. Monitoring Section (Search + Metrics)
+        Node monitoringSection = buildMonitoringSection();
+        
+        // 3. Performance Section (Table)
+        Node performanceSection = buildPerformanceSection();
 
-        getChildren().addAll(
-                buildStudentMonitoringSection(),
-                buildAnalyticsSection(),
-                buildPerformanceSection()
-        );
+        getChildren().addAll(title, subtitle, monitoringSection, performanceSection);
 
-        refreshMonitoringStats();
         loadStudentProfiles();
     }
 
-    private Node buildStudentMonitoringSection() {
-        VBox container = new VBox(16);
-        container.getStyleClass().add("section-container");
-        container.setPadding(new Insets(16));
+    private Node buildMonitoringSection() {
+        VBox container = new VBox(0);
+        container.setStyle("-fx-background-color: white; -fx-border-color: #ddd; -fx-border-width: 1;");
+        VBox.setMargin(container, new Insets(10, 0, 0, 0));
 
-        Label sectionTitle = new Label("Educator Dashboard - Student Monitoring");
-        sectionTitle.getStyleClass().add("section-header");
+        // Header
+        HBox header = new HBox();
+        header.setPadding(new Insets(12, 16, 12, 16));
+        header.setStyle("-fx-background-color: #f0f0f0; -fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        Label headerLabel = new Label("Student Monitoring"); // Removed "Educator Dashboard - " to avoid duplication
+        headerLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+        header.getChildren().add(headerLabel);
 
-        HBox topBar = new HBox(12);
-        topBar.setAlignment(Pos.CENTER_LEFT);
+        // Content
+        VBox content = new VBox(20);
+        content.setPadding(new Insets(20));
+        content.getChildren().addAll(
+                buildSearchAndExportBar(),
+                buildMetricsPanel()
+        );
 
-        TextField search = new TextField();
-        search.setPromptText("Search students by name or email...");
-        search.getStyleClass().add("modern-search-bar");
-        search.setPrefWidth(400);
-        search.textProperty().addListener((obs, old, val) -> {
+        container.getChildren().addAll(header, content);
+        return container;
+    }
+
+
+
+    private Node buildMetricsPanel() {
+        HBox panel = new HBox(16);
+        panel.setAlignment(Pos.CENTER_LEFT);
+
+        // Create 4 stat cards
+        VBox card1 = createMetricCard(totalStudentsValue, "Total Students");
+        VBox card2 = createMetricCard(performingWellValue, "Performing Well");
+        VBox card3 = createMetricCard(needsHelpValue, "Need Attention");
+        VBox card4 = createMetricCard(avgCompletionValue, "Avg Completion");
+
+        HBox.setHgrow(card1, Priority.ALWAYS);
+        HBox.setHgrow(card2, Priority.ALWAYS);
+        HBox.setHgrow(card3, Priority.ALWAYS);
+        HBox.setHgrow(card4, Priority.ALWAYS);
+
+        panel.getChildren().addAll(card1, card2, card3, card4);
+        return panel;
+    }
+
+    private VBox createMetricCard(Label valueLabel, String title) {
+        VBox card = new VBox(6);
+        card.setPadding(new Insets(16));
+        card.setAlignment(Pos.CENTER);
+        card.setStyle("-fx-background-color: #e8e8e8; -fx-background-radius: 4;"); // Gray background as per image
+        card.setMaxWidth(Double.MAX_VALUE);
+
+        valueLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: black;");
+        
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #444;");
+
+        card.getChildren().addAll(valueLabel, titleLabel);
+        return card;
+    }
+
+    private Node buildSearchAndExportBar() {
+        HBox bar = new HBox(12);
+        bar.setAlignment(Pos.CENTER_LEFT);
+
+        TextField searchField = new TextField();
+        searchField.setPromptText(""); // Empty prompt as per image usually, or maybe "Search..."
+        searchField.setPrefWidth(400);
+        searchField.setStyle("-fx-padding: 8px; -fx-font-size: 13px; -fx-background-color: white; -fx-border-color: #ccc; -fx-border-radius: 4;");
+        searchField.textProperty().addListener((obs, old, val) -> {
             String lower = val == null ? "" : val.toLowerCase(Locale.ROOT);
             filteredStudents.setPredicate(profile -> {
                 if (lower.isBlank()) return true;
@@ -100,28 +163,211 @@ public class EducatorDashboardView extends VBox {
             });
         });
 
-        Button searchBtn = new Button("\uD83D\uDD0D");
-        searchBtn.getStyleClass().add("icon-button-bw");
-        searchBtn.setOnAction(e -> search.requestFocus());
+        Button searchBtn = new Button("Q"); // Using Q as icon placeholder or magnifying glass
+        searchBtn.setStyle("-fx-padding: 8px 16px; -fx-font-size: 13px; -fx-background-color: black; -fx-text-fill: white; -fx-cursor: hand; -fx-background-radius: 4;");
+        searchBtn.setOnAction(e -> searchField.requestFocus());
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        topBar.getChildren().addAll(search, searchBtn, spacer);
+        Button exportBtn = new Button("Export Student Reports");
+        exportBtn.setGraphic(new Label("⬇")); // Simple icon
+        exportBtn.setStyle("-fx-padding: 8px 16px; -fx-font-size: 13px; -fx-background-color: white; -fx-border-color: #ccc; -fx-border-radius: 4; -fx-cursor: hand; -fx-text-fill: black;");
+        exportBtn.setOnAction(e -> handleExport());
 
-        HBox stats = new HBox(16);
-        stats.setAlignment(Pos.CENTER_LEFT);
-        HBox.setHgrow(stats, Priority.ALWAYS);
+        bar.getChildren().addAll(searchField, searchBtn, spacer, exportBtn);
+        return bar;
+    }
 
-        stats.getChildren().addAll(
-                createStatCard(totalStudentsValue, "Total Students"),
-                createStatCard(performingWellValue, "Performing Well"),
-                createStatCard(needsHelpValue, "Need Attention"),
-                createStatCard(avgCompletionValue, "Avg Completion")
-        );
+    private void handleExport() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Student Report");
+        fileChooser.setInitialFileName("student_report.csv");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
+        File file = fileChooser.showSaveDialog(getScene().getWindow());
 
-        container.getChildren().addAll(sectionTitle, topBar, stats);
-        return container;
+        if (file != null) {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                // Header
+                writer.write("Student Name,Email,Role,Modules Completed,Total Modules,Quizzes Taken,Average Score,Wallet Health Score,Wallet Savings,Job Applications,Job Saves,Alerts\n");
+
+                // Export all students (or filteredStudents if preferred, using allStudents for comprehensive report as requested "all data")
+                for (StudentProfile profile : allStudents) {
+                    StudentProgress progress = progressForProfile(profile);
+                    String name = displayStudentName(profile.getEmail());
+                    String email = profile.getEmail();
+                    String role = displayRoleLabel(profile);
+                    
+                    int modules = progress != null ? progress.getModulesCompleted() : 0;
+                    int totalModules = progress != null ? progress.getTotalModules() : 0;
+                    int quizzes = progress != null ? progress.getQuizzesTaken() : 0;
+                    double avgScore = progress != null ? progress.getAverageScore() : 0.0;
+                    double health = progress != null ? progress.getWalletHealthScore() : 0.0;
+                    int savings = progress != null ? progress.getWalletSavings() : 0;
+                    int apps = progress != null ? progress.getEmploymentApplications() : 0;
+                    int saves = progress != null ? progress.getJobSaves() : 0;
+                    int alerts = progress != null ? progress.getAlerts() : 0;
+
+                    String line = String.format("%s,%s,%s,%d,%d,%d,%.2f,%.2f,%d,%d,%d,%d\n",
+                            escapeCsv(name),
+                            escapeCsv(email),
+                            escapeCsv(role),
+                            modules, totalModules,
+                            quizzes, avgScore,
+                            health, savings,
+                            apps, saves, alerts);
+                    writer.write(line);
+                }
+                
+                Alert alert = new Alert(Alert.AlertType.INFORMATION, "Export successful!", ButtonType.OK);
+                alert.showAndWait();
+            } catch (IOException ex) {
+                Alert alert = new Alert(Alert.AlertType.ERROR, "Failed to export: " + ex.getMessage(), ButtonType.OK);
+                alert.showAndWait();
+            }
+        }
+    }
+
+    private String escapeCsv(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
+
+    private HBox createStudentRow(StudentProfile profile) {
+        HBox row = new HBox();
+        row.setPadding(new Insets(16, 12, 16, 12));
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setStyle("-fx-border-color: #eee; -fx-border-width: 0 0 1 0;");
+
+        StudentProgress progress = progressForProfile(profile);
+        String studentName = progress != null && progress.getStudentName() != null 
+                ? progress.getStudentName() 
+                : profile.getEmail();
+
+        // Name column with alert indicator
+        VBox nameCol = new VBox(4);
+        nameCol.setPrefWidth(200);
+        Label nameLabel = new Label(studentName);
+        nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
+        
+        int alerts = progress != null ? progress.getAlerts() : 0;
+        if (alerts > 0) {
+            Label alertLabel = new Label(alerts + " alert" + (alerts > 1 ? "s" : ""));
+            alertLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #ff5722;");
+            nameCol.getChildren().addAll(nameLabel, alertLabel);
+        } else {
+            nameCol.getChildren().add(nameLabel);
+        }
+
+        // Lessons Progress column with progress bar
+        VBox lessonsCol = new VBox(4);
+        lessonsCol.setPrefWidth(200);
+        int completed = progress != null ? progress.getModulesCompleted() : 0;
+        int total = 12;
+        
+        Label progressLabel = new Label(completed + "/" + total);
+        progressLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
+        
+        javafx.scene.control.ProgressBar progressBar = new javafx.scene.control.ProgressBar((double) completed / total);
+        progressBar.setPrefWidth(180);
+        progressBar.setStyle("-fx-accent: #4CAF50;");
+        
+        lessonsCol.getChildren().addAll(progressBar, progressLabel);
+
+        // Quiz Avg column
+        VBox quizCol = new VBox(4);
+        quizCol.setPrefWidth(150);
+        int quizzesTaken = progress != null ? progress.getQuizzesTaken() : 0;
+        double quizAvg = progress != null ? progress.getAverageScore() : 0.0;
+        
+        Label quizAvgLabel = new Label(Math.round(quizAvg) + "%");
+        quizAvgLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+        
+        Label quizCountLabel = new Label(quizzesTaken + " quizzes");
+        quizCountLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        
+        quizCol.getChildren().addAll(quizAvgLabel, quizCountLabel);
+
+        // Wallet Health column with badge
+        VBox walletCol = new VBox(4);
+        walletCol.setPrefWidth(150);
+        double walletSavings = progress != null ? progress.getWalletSavings() : 0.0;
+        
+        String healthStatus;
+        String healthColor;
+        if (walletSavings >= 8000) {
+            healthStatus = "Excellent";
+            healthColor = "#4CAF50";
+        } else if (walletSavings >= 5000) {
+            healthStatus = "Good";
+            healthColor = "#2196F3";
+        } else {
+            healthStatus = "Needs Attention";
+            healthColor = "#FF9800";
+        }
+        
+        Label healthBadge = new Label(healthStatus);
+        healthBadge.setStyle("-fx-background-color: " + healthColor + "; -fx-text-fill: white; -fx-padding: 4px 12px; -fx-background-radius: 12; -fx-font-size: 11px; -fx-font-weight: bold;");
+        
+        Label healthAmount = new Label("₹" + Math.round(walletSavings) + " saved");
+        healthAmount.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        
+        walletCol.getChildren().addAll(healthBadge, healthAmount);
+
+        // Job Activity column
+        VBox jobCol = new VBox(4);
+        jobCol.setPrefWidth(150);
+        
+        // Fetch job activity for this student
+        int applied = progress != null ? progress.getEmploymentApplications() : 0;
+        int saved = progress != null ? progress.getJobSaves() : 0;
+        
+        Label appliedLabel = new Label(applied + " applied");
+        appliedLabel.setStyle("-fx-font-size: 12px;");
+        
+        Label savedLabel = new Label(saved + " saved");
+        savedLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #666;");
+        
+        jobCol.getChildren().addAll(appliedLabel, savedLabel);
+
+        // Actions column
+        VBox actionsCol = new VBox();
+        actionsCol.setPrefWidth(150);
+        
+        Button viewDetailsBtn = new Button("View Details");
+        viewDetailsBtn.setStyle("-fx-background-color: #333; -fx-text-fill: white; -fx-padding: 6px 16px; -fx-font-size: 12px; -fx-cursor: hand;");
+        viewDetailsBtn.setOnAction(e -> showStudentDetail(profile));
+        
+        actionsCol.getChildren().add(viewDetailsBtn);
+
+        row.getChildren().addAll(nameCol, lessonsCol, quizCol, walletCol, jobCol, actionsCol);
+        return row;
+    }
+
+    private void refreshMetrics() {
+        int total = allStudents.size();
+        int performingWell = 0;
+        int needsHelp = 0;
+        double totalCompletion = 0;
+
+        for (StudentProfile profile : allStudents) {
+            StudentProgress progress = progressForProfile(profile);
+            if (progress != null) {
+                double quizAvg = progress.getAverageScore();
+                if (quizAvg >= 80) performingWell++;
+                if (quizAvg < 70 && quizAvg > 0) needsHelp++;
+                
+                totalCompletion += (progress.getModulesCompleted() * 100.0 / 12);
+            }
+        }
+
+        totalStudentsValue.setText(String.valueOf(total));
+        performingWellValue.setText(String.valueOf(performingWell));
+        needsHelpValue.setText(String.valueOf(needsHelp));
+        avgCompletionValue.setText(total > 0 ? Math.round(totalCompletion / total) + "%" : "0%");
     }
 
     private Node createStatCard(Label valueLabel, String title) {
@@ -241,7 +487,6 @@ public class EducatorDashboardView extends VBox {
     }
 
     private void loadStudentProfiles() {
-        studentTable.setPlaceholder(new Label("Loading students..."));
         CompletableFuture.runAsync(() -> {
             List<StudentProfile> profiles = Collections.emptyList();
             try {
@@ -258,29 +503,42 @@ public class EducatorDashboardView extends VBox {
                     studentsOnly.add(profile);
                 }
             }
-            Platform.runLater(() -> {
-                progressCache.clear();
-                allStudents.setAll(studentsOnly);
-                refreshMonitoringStats();
-                if (studentsOnly.isEmpty()) {
-                    studentTable.setPlaceholder(new Label("No students found. Try again later."));
+            
+            // Fetch progress for all students
+            for (StudentProfile profile : studentsOnly) {
+                try {
+                    StudentProgress progress = repository.getStudentProgress(profile.getEmail());
+                    if (progress != null) {
+                        progressCache.put(profile.getEmail(), progress);
+                    }
+                } catch (Exception e) {
+                    System.err.println("[EducatorDashboardView] Failed to load progress for " + profile.getEmail());
                 }
+            }
+            
+            Platform.runLater(() -> {
+                allStudents.setAll(studentsOnly);
+                refreshMetrics();
             });
         });
     }
 
     private Node buildPerformanceSection() {
-        VBox container = new VBox(16);
-        container.getStyleClass().add("section-container");
-        container.setPadding(new Insets(16));
+        VBox container = new VBox(0);
+        container.setStyle("-fx-background-color: white; -fx-border-color: #ddd; -fx-border-width: 1;");
+        VBox.setMargin(container, new Insets(20, 0, 0, 0));
 
-        Label sectionTitle = new Label("Student Performance Overview");
-        sectionTitle.getStyleClass().add("section-header");
+        // Header
+        HBox header = new HBox();
+        header.setPadding(new Insets(12, 16, 12, 16));
+        header.setStyle("-fx-background-color: #f0f0f0; -fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        Label headerLabel = new Label("Student Performance Overview");
+        headerLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+        header.getChildren().add(headerLabel);
 
         studentTable.setItems(filteredStudents);
         studentTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        studentTable.getStyleClass().add("bw-table");
-        studentTable.setStyle("-fx-background-color: transparent; -fx-border-color: transparent;");
+        studentTable.setStyle("-fx-background-color: white; -fx-border-width: 0;");
 
         studentTable.setRowFactory(tv -> new TableRow<>() {
             @Override
@@ -451,7 +709,12 @@ public class EducatorDashboardView extends VBox {
         });
 
         studentTable.getColumns().addAll(nameCol, lessonsCol, quizCol, walletCol, jobCol, actionCol);
-        container.getChildren().addAll(sectionTitle, studentTable);
+        // Check if columns are already added to avoid duplication on refresh (though this builds a new node)
+        if (studentTable.getColumns().isEmpty()) {
+            studentTable.getColumns().addAll(nameCol, lessonsCol, quizCol, walletCol, jobCol, actionCol);
+        }
+        
+        container.getChildren().addAll(header, studentTable);
         return container;
     }
 

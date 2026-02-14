@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -1010,31 +1011,18 @@ public class DataRepository {
 
     public StudentProgress getStudentProgress(String email) {
         if (email == null) return null;
-        if (studentProgressCache == null || studentProgressCache.isEmpty()) {
-            studentProgressCache = mapTable("student_progress", null, this::toStudentProgress);
-        }
         
         String normalized = email.toLowerCase(Locale.ROOT);
-        StudentProgress progress = null;
-        for (StudentProgress p : studentProgressCache) {
-            if (normalized.equals(p.getUserEmail().toLowerCase(Locale.ROOT))) {
-                progress = p;
-                break;
-            }
-        }
         
-        if (progress == null) {
-            progress = fetchStudentProgressRecord(normalized);
-        }
+        // Fetch existing record to get the name (if available)
+        StudentProgress existing = fetchStudentProgressRecord(normalized);
+        String studentName = (existing != null && existing.getStudentName() != null) ? existing.getStudentName() : "Student";
         
-        // If still null or we want to ensure "live/persistent" stats even if student_progress is broken:
-        // Derive key metrics from working tables (wallet_entries and quiz_attempts)
-        List<WalletEntry> wallet = fetchWalletByEmail(normalized);
-        int totalCoins = (int) wallet.stream()
-                .filter(e -> e.getType() == WalletEntryType.INCOME && "Education".equalsIgnoreCase(e.getCategory()))
-                .mapToDouble(WalletEntry::getAmount)
-                .sum();
-                
+        // 1. Fetch Lessons Count (Live)
+        List<LessonCompletion> completions = fetchLessonCompletionsByEmail(normalized);
+        int modulesCompleted = completions.size();
+
+        // 2. Fetch Quiz Stats (Live)
         List<QuizAttempt> attempts = fetchQuizAttemptsByEmail(normalized);
         int quizzesTaken = attempts.size();
         
@@ -1042,32 +1030,79 @@ public class DataRepository {
                 .mapToDouble(a -> (double) a.getScore() / Math.max(a.getMaxScore(), 1) * 100)
                 .average()
                 .orElse(0.0);
-                
-        List<LessonCompletion> completions = fetchLessonCompletionsByEmail(normalized);
-        int modulesCompleted = completions.size();
 
-        if (progress == null) {
-            progress = new StudentProgress("Student", normalized, modulesCompleted, getLessons().size(), quizzesTaken, avgScore, 0, totalCoins, 0, 0, 0, 0);
-        } else {
-            // Override with derived values to ensure they are always "live" and persistent
-            progress = new StudentProgress(
-                    progress.getStudentName(),
-                    progress.getUserEmail(),
-                    modulesCompleted,
-                    getLessons().size(),
-                    quizzesTaken,
-                    avgScore,
-                    progress.getWalletHealthScore(),
-                    totalCoins,
-                    progress.getEmploymentApplications(),
-                    progress.getJobSaves(),
-                    progress.getWalletSavings(),
-                    progress.getAlerts()
-            );
-        }
+        // 3. Fetch Wallet Stats (Live)
+        // We need total savings.
+        List<WalletEntry> wallet = fetchWalletByEmail(normalized);
+        int totalSavings = (int) calculateTotalSavings(wallet);
         
+        // Calculate "Parivaar Points" or "Total Coins" - typically distinct from savings? 
+        // Existing logic used Income of type Education?
+        int totalCoins = (int) wallet.stream()
+                .filter(e -> e.getType() == WalletEntryType.INCOME && "Education".equalsIgnoreCase(e.getCategory()))
+                .mapToDouble(WalletEntry::getAmount)
+                .sum();
+        
+        // 4. Fetch Job Activity (Live)
+        List<JobApplication> apps = fetchJobApplications(normalized);
+        int employmentApplications = apps.size();
+        
+        int jobSaves = fetchJobSavesCount(normalized);
+
+        // 5. Fetch Alerts (Live)
+        List<Alert> alertsList = fetchAlerts(normalized);
+        int alertsCount = alertsList.size();
+        
+        double walletHealthScore = calculateWalletHealthScore(totalSavings); // Helper method logic
+
+        // Create the progress object with live data
+        StudentProgress progress = new StudentProgress(
+                studentName,
+                normalized,
+                modulesCompleted,
+                getLessons().size(),
+                quizzesTaken,
+                avgScore,
+                walletHealthScore,
+                totalCoins,
+                employmentApplications,
+                jobSaves,
+                totalSavings,
+                alertsCount
+        );
+        
+        // Cache it
         cacheStudentProgress(progress);
+        
+        // Optionally update the persistent record asynchronously so it stays relatively fresh
+        // but we return the calculated one immediately.
+        CompletableFuture.runAsync(() -> updateStudentProgress(progress));
+        
         return progress;
+    }
+
+    private int fetchJobSavesCount(String email) {
+        if (email == null) return 0;
+        try {
+            // We can just count the rows
+            String query = "user_email=eq." + URLEncoder.encode(email, StandardCharsets.UTF_8) + "&select=count";
+            // Supabase client might not support count easily with fetchTable without 'count=exact' header
+            // Fallback: fetch IDs
+             String q = "select=id&user_email=eq." + URLEncoder.encode(email, StandardCharsets.UTF_8);
+             JsonArray data = supabaseClient.fetchTable("job_favorites", q, getSafeToken());
+             return data != null ? data.size() : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private double calculateWalletHealthScore(int savings) {
+        // Simple logic: Target is 2000 (from existing code in EducatorDashboardView chart).
+        // 5000 is "Good", 8000 is "Excellent" in Dashboard logic.
+        // Let's normalize to a 0-100 score.
+        // If 5000 is 50/100? No, dashboard says >= 50 is Good.
+        // Let's say 10000 savings = 100 score.
+        return Math.min(100.0, (double) savings / 100.0); 
     }
 
     private StudentProgress fetchStudentProgressRecord(String email) {
@@ -1408,8 +1443,24 @@ public class DataRepository {
                 safeString(json, "severity", "info"),
                 safeString(json, "message", ""),
                 details,
-                safeDateTime(json, "created_at", LocalDateTime.now())
+                safeDateTime(json, "created_at", LocalDateTime.now()),
+                safeInt(json, "read", 0) == 1
         );
+    }
+
+    public void markAlertAsRead(String alertId) {
+        if (alertId == null || alertId.isEmpty()) return;
+        
+        JsonObject payload = new JsonObject();
+        // payload.addProperty("id", alertId); // ID not needed in payload for update
+        payload.addProperty("read", true);
+        
+        try {
+            // Use update instead of upsert to avoid constraint violations on missing rows
+            safeUpdateRecord("alerts", "id=eq." + alertId, payload, getSafeToken());
+        } catch (Exception e) {
+            System.err.println("[DataRepository] Failed to mark alert as read: " + e.getMessage());
+        }
     }
     public boolean updateStudentProgress(StudentProgress progress) {
         if (progress == null || progress.getUserEmail() == null) {

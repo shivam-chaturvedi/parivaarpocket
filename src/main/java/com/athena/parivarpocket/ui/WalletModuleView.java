@@ -209,8 +209,19 @@ public class WalletModuleView extends VBox {
             return;
         }
 
-        // Show last 10 entries
-        walletEntries.stream().limit(10).forEach(entry -> {
+        // Filter out Education category (quiz coins) - they're not real money
+        List<WalletEntry> realMoneyEntries = walletEntries.stream()
+                .filter(entry -> !"Education".equalsIgnoreCase(entry.getCategory()))
+                .limit(10)
+                .collect(Collectors.toList());
+        
+        if (realMoneyEntries.isEmpty()) {
+            transactionList.getChildren().add(new Label("No wallet transactions yet."));
+            return;
+        }
+
+        // Show last 10 real money entries
+        realMoneyEntries.forEach(entry -> {
             HBox row = new HBox(12);
             row.setAlignment(Pos.CENTER_LEFT);
             row.setPadding(new Insets(8, 12, 8, 12));

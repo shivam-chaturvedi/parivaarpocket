@@ -14,6 +14,7 @@ public class Alert {
     private final String message;
     private final Map<String, String> metadata;
     private final LocalDateTime createdAt;
+    private final boolean read;
 
     public Alert(String id,
                  String userEmail,
@@ -21,7 +22,8 @@ public class Alert {
                  String severity,
                  String message,
                  Map<String, String> metadata,
-                 LocalDateTime createdAt) {
+                 LocalDateTime createdAt,
+                 boolean read) {
         this.id = id;
         this.userEmail = userEmail;
         this.category = category;
@@ -29,6 +31,7 @@ public class Alert {
         this.message = message;
         this.metadata = metadata != null ? Map.copyOf(metadata) : Collections.emptyMap();
         this.createdAt = createdAt;
+        this.read = read;
     }
 
     public String getId() {
@@ -57,6 +60,10 @@ public class Alert {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isRead() {
+        return read;
     }
 
     public String getMetadataSummary() {

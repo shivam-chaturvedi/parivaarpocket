@@ -33,8 +33,28 @@ public class MainLayout {
         this.offlineSyncService = offlineSyncService;
         this.onLogout = onLogout;
         root.setCenter(centerWrapper);
-        render();
-        prefetchData(user);
+        
+        // Show UI instantly with loading placeholder
+        renderSkeleton();
+        
+        // Load data asynchronously in background
+        CompletableFuture.runAsync(() -> {
+            repository.prefetchAll(user);
+        }).thenRun(() -> Platform.runLater(this::render));
+    }
+    
+    private void renderSkeleton() {
+        SidebarView sidebar = new SidebarView(user, activeTab, this::setActiveTab, onLogout, offlineSyncService);
+        root.setLeft(sidebar);
+        root.setTop(null);
+        
+        // Show loading placeholder
+        VBox loadingPlaceholder = new VBox(20);
+        loadingPlaceholder.setStyle("-fx-alignment: center; -fx-padding: 40px;");
+        javafx.scene.control.Label loadingLabel = new javafx.scene.control.Label("Loading dashboard...");
+        loadingLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: #666;");
+        loadingPlaceholder.getChildren().add(loadingLabel);
+        centerWrapper.getChildren().setAll(loadingPlaceholder);
     }
 
     public BorderPane getView() {
@@ -138,12 +158,5 @@ public class MainLayout {
 
     private void showContent(Node content) {
         centerWrapper.getChildren().setAll(content);
-    }
-
-    private void prefetchData(User user) {
-        CompletableFuture.runAsync(() -> {
-            repository.prefetchAll(user);
-            Platform.runLater(this::refreshContent);
-        });
     }
 }
