@@ -236,13 +236,33 @@ public class LearningModuleView extends VBox {
         impText.setWrapText(true);
         importantBox.getChildren().addAll(impTitle, impText);
 
-        // Footer with Quiz and Close
+        // Footer with Finished, Quiz and Close buttons
         HBox modalFooter = new HBox(12);
         modalFooter.setAlignment(Pos.CENTER_RIGHT);
         
         Button closeBtn = new Button("Close");
         closeBtn.getStyleClass().add("outline-button");
         closeBtn.setOnAction(e -> stage.close());
+
+        // TEST 18: "Finished" button — awards coins and shows congratulations message
+        User user = repository.getCurrentUser();
+        Button finishedBtn = new Button("Finished");
+        finishedBtn.getStyleClass().add("primary-button");
+        finishedBtn.setOnAction(e -> {
+            stage.close();
+            if (user != null && !repository.isLessonCompleted(lesson.getId())) {
+                repository.awardParivaarPoints(user, 100, "Completed module: " + lesson.getTitle());
+                JsonObject activityData = new JsonObject();
+                activityData.addProperty("lesson_id", lesson.getId());
+                activityData.addProperty("action", "module_finished");
+                repository.logStudentActivity(user, "module_finished", activityData);
+            }
+            Alert congrats = new Alert(Alert.AlertType.INFORMATION);
+            congrats.setHeaderText("Well Done!");
+            congrats.setContentText("Fantastic work! You are an excellent learner.");
+            congrats.showAndWait();
+            refreshContent();
+        });
         
         List<QuizDefinition> quizzes = repository.getQuizzesForLesson(lesson.getId());
         if (!quizzes.isEmpty()) {
@@ -254,7 +274,7 @@ public class LearningModuleView extends VBox {
             });
             modalFooter.getChildren().add(quizBtn);
         }
-        modalFooter.getChildren().add(closeBtn);
+        modalFooter.getChildren().addAll(finishedBtn, closeBtn);
 
         body.getChildren().addAll(overviewTitle, contentBox, topicsSection, importantBox, modalFooter);
         
@@ -296,15 +316,20 @@ public class LearningModuleView extends VBox {
         VBox content = new VBox(20);
         content.setPadding(new Insets(24));
 
-        // Question Info and Coins info
+        // Question Info, Difficulty label, and Coins info
         Label qCountLabel = new Label();
         qCountLabel.getStyleClass().add("quiz-question-count");
         Label coinRewardLabel = new Label("+50 Coins per correct answer");
         coinRewardLabel.getStyleClass().add("quiz-coins-info");
+
+        // TEST 23: Difficulty label in top right corner
+        Label difficultyLabel = new Label();
+        difficultyLabel.getStyleClass().add("quiz-difficulty-label");
+        difficultyLabel.setStyle("-fx-font-weight: bold; -fx-padding: 2 8; -fx-border-radius: 4; -fx-background-radius: 4;");
         
         Region metaSpacer = new Region();
         HBox.setHgrow(metaSpacer, Priority.ALWAYS);
-        HBox metaRow = new HBox(8, qCountLabel, metaSpacer, coinRewardLabel);
+        HBox metaRow = new HBox(8, qCountLabel, coinRewardLabel, metaSpacer, difficultyLabel);
         metaRow.setAlignment(Pos.CENTER_LEFT);
 
         ProgressBar bar = new ProgressBar(0);
@@ -327,6 +352,7 @@ public class LearningModuleView extends VBox {
         feedbackBox.setVisible(false);
         Label feedbackTitle = new Label();
         feedbackTitle.getStyleClass().add("quiz-feedback-title");
+        feedbackTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold;");
         Label feedbackSub = new Label();
         feedbackSub.getStyleClass().add("quiz-feedback-sub");
         feedbackBox.getChildren().addAll(feedbackTitle, feedbackSub);
@@ -354,14 +380,36 @@ public class LearningModuleView extends VBox {
         char[] labels = {'A', 'B', 'C', 'D'};
 
         Runnable updateQuestion = () -> {
-            QuizQuestion q = questions.get(currentIndex[0]);
-            qCountLabel.setText(String.format("Question %d of %d", currentIndex[0] + 1, questions.size()));
-            bar.setProgress((double)(currentIndex[0]) / questions.size());
+            int idx = currentIndex[0];
+            QuizQuestion q = questions.get(idx);
+            qCountLabel.setText(String.format("Question %d of %d", idx + 1, questions.size()));
+            bar.setProgress((double)(idx) / questions.size());
             questionTxt.setText(q.getQuestion());
             optionsList.getChildren().clear();
             feedbackBox.setVisible(false);
             nextBtn.setDisable(true);
-            nextBtn.setText(currentIndex[0] == questions.size() - 1 ? "Finish" : "Next");
+            nextBtn.setText(idx == questions.size() - 1 ? "Finish" : "Next");
+
+            // TEST 23: Assign difficulty based on question position
+            int total = questions.size();
+            String difficulty;
+            String diffColor;
+            if (total <= 1) {
+                difficulty = "Easy";
+                diffColor = "#4CAF50";
+            } else if (idx < total / 3) {
+                difficulty = "Easy";
+                diffColor = "#4CAF50";
+            } else if (idx < (total * 2) / 3) {
+                difficulty = "Medium";
+                diffColor = "#FF9800";
+            } else {
+                difficulty = "Hard";
+                diffColor = "#f44336";
+            }
+            difficultyLabel.setText(difficulty);
+            difficultyLabel.setStyle("-fx-font-weight: bold; -fx-padding: 2 10; -fx-border-radius: 4; "
+                    + "-fx-background-radius: 4; -fx-background-color: " + diffColor + "; -fx-text-fill: white;");
 
             for (int i = 0; i < q.getOptions().size(); i++) {
                 final int optIdx = i;
@@ -399,14 +447,38 @@ public class LearningModuleView extends VBox {
                         }
                     }
                     
-                    // Show selection
-                    optContainer.getStyleClass().add("quiz-option-selected");
+                    // TEST 20-21: Green/red color feedback on selected option
+                    if (correct) {
+                        optContainer.setStyle("-fx-background-color: #4CAF50; -fx-background-radius: 8;");
+                        lbl.setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
+                        txt.setStyle("-fx-text-fill: white;");
+                    } else {
+                        optContainer.setStyle("-fx-background-color: #f44336; -fx-background-radius: 8;");
+                        lbl.setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
+                        txt.setStyle("-fx-text-fill: white;");
+                        // Also highlight the correct answer in green
+                        int correctIdx = q.getCorrectOption();
+                        if (correctIdx >= 0 && correctIdx < optionsList.getChildren().size()) {
+                            HBox correctContainer = (HBox) optionsList.getChildren().get(correctIdx);
+                            correctContainer.setStyle("-fx-background-color: #4CAF50; -fx-background-radius: 8;");
+                            for (Node child : correctContainer.getChildren()) {
+                                child.setStyle("-fx-text-fill: white;");
+                            }
+                        }
+                    }
                     
-                    // Show feedback
+                    // Show feedback with specific messages per test 20-21
                     feedbackBox.setVisible(true);
-                    feedbackTitle.setText(correct ? "Correct! \u2713" : "Incorrect \u2717");
-                    String rewardMsg = rewarded ? " You've earned 50 ParivaarCoins." : (correct ? " (Already rewarded previously)" : "");
-                    feedbackSub.setText(correct ? "Great job!" + rewardMsg : "The correct answer was " + labels[q.getCorrectOption() % 4] + ".");
+                    if (correct) {
+                        feedbackTitle.setText("Correct \u2713, 50 ParivaarCoins earned");
+                        feedbackTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;");
+                        feedbackSub.setText("Great job! Keep going.");
+                    } else {
+                        String correctAnswerText = q.getOptions().get(q.getCorrectOption());
+                        feedbackTitle.setText("Incorrect \u2717, the answer was: " + correctAnswerText);
+                        feedbackTitle.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #c62828;");
+                        feedbackSub.setText("Review the material and try again next time.");
+                    }
                     
                     nextBtn.setDisable(false);
                 });
@@ -470,6 +542,9 @@ public class LearningModuleView extends VBox {
         activityData.addProperty("max_score", totalMarks);
         activityData.addProperty("passed", passed);
         repository.logStudentActivity(user, "quiz_complete", activityData);
+        
+        // Tests 38-39: Check and log alerts for educator after quiz completion
+        java.util.concurrent.CompletableFuture.runAsync(() -> repository.checkAndLogStudentAlerts(user));
         
         refreshContent();
     }

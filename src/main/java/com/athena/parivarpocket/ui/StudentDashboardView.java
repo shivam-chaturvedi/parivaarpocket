@@ -1,12 +1,15 @@
 package com.athena.parivarpocket.ui;
 
 import com.athena.parivarpocket.model.JobOpportunity;
+import com.athena.parivarpocket.model.JobApplication;
 import com.athena.parivarpocket.model.Lesson;
 import com.athena.parivarpocket.model.QuizResult;
 import com.athena.parivarpocket.model.User;
 import com.athena.parivarpocket.model.WalletEntry;
 import com.athena.parivarpocket.model.WalletEntryType;
 import com.athena.parivarpocket.service.DataRepository;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -71,6 +74,23 @@ public class StudentDashboardView extends VBox {
         // Jobs Section - Show all favorited jobs on dashboard
         List<JobOpportunity> favoritedJobs = repository.fetchFavoriteJobs(user);
         getChildren().add(buildBookmarkedJobs(favoritedJobs));
+
+        // TEST 28: Applied Jobs section - show jobs with "Applied ✓" status
+        VBox appliedSection = buildAppliedJobsSection();
+        getChildren().add(appliedSection);
+
+        // Load applied jobs asynchronously
+        Task<List<JobApplication>> appsTask = new Task<>() {
+            @Override
+            protected List<JobApplication> call() {
+                return repository.fetchJobApplications(user.getEmail());
+            }
+        };
+        appsTask.setOnSucceeded(e -> {
+            List<JobApplication> apps = appsTask.getValue();
+            Platform.runLater(() -> populateAppliedJobs(appliedSection, apps));
+        });
+        new Thread(appsTask).start();
     }
 
     private Panel buildWelcomePanel(User user,
@@ -225,7 +245,7 @@ public class StudentDashboardView extends VBox {
                  // Log dashboard job view activity
                  User currentUser = repository.getCurrentUser();
                  if (currentUser != null) {
-                     JsonObject activityData = new JsonObject();
+                     com.google.gson.JsonObject activityData = new com.google.gson.JsonObject();
                      activityData.addProperty("job_id", job.getId());
                      activityData.addProperty("job_title", job.getTitle());
                      activityData.addProperty("company", job.getCompany());
@@ -234,8 +254,8 @@ public class StudentDashboardView extends VBox {
                  }
 
                  try {
-                     Desktop.getDesktop().browse(new URI(indeedLink));
-                 } catch (IOException | URISyntaxException ex) {
+                     java.awt.Desktop.getDesktop().browse(new java.net.URI(indeedLink));
+                 } catch (java.io.IOException | java.net.URISyntaxException ex) {
                      ex.printStackTrace();
                  }
              });
@@ -262,9 +282,58 @@ public class StudentDashboardView extends VBox {
         content.setPadding(new Insets(20));
         Panel panel = new Panel("Bookmarked Opportunities", content);
         panel.getStyleClass().add("dashboard-card");
-        // Remove default panel header style if wrapper handles it, but Panel class adds it.
-        // We might want to customize, but standard Panel is fine for now.
         return panel;
+    }
+
+    /** TEST 28: Applied Jobs section placeholder — populated async */
+    private VBox buildAppliedJobsSection() {
+        VBox section = new VBox(12);
+        section.getStyleClass().add("dashboard-card");
+        section.setPadding(new Insets(20));
+        Label header = new Label("Applied Jobs");
+        header.getStyleClass().add("panel-header");
+        Label loading = new Label("Loading applied jobs...");
+        loading.setStyle("-fx-text-fill: #888;");
+        section.getChildren().addAll(header, loading);
+        return section;
+    }
+
+    private void populateAppliedJobs(VBox section, List<JobApplication> apps) {
+        section.getChildren().clear();
+        Label header = new Label("Applied Jobs");
+        header.getStyleClass().add("panel-header");
+        section.getChildren().add(header);
+
+        if (apps == null || apps.isEmpty()) {
+            Label empty = new Label("No job applications yet. Apply from the Work tab!");
+            empty.setStyle("-fx-text-fill: #888;");
+            section.getChildren().add(empty);
+            return;
+        }
+
+        for (JobApplication app : apps) {
+            HBox row = new HBox(16);
+            row.setAlignment(Pos.CENTER_LEFT);
+            row.setPadding(new Insets(8, 12, 8, 12));
+            row.setStyle("-fx-background-color: #f9f9f9; -fx-background-radius: 8; -fx-border-color: #eee; -fx-border-width: 1;");
+
+            VBox info = new VBox(4);
+            Label jobId = new Label("Job ID: " + app.getJobId());
+            jobId.setStyle("-fx-font-weight: bold;");
+            Label dateLabel = new Label("Applied: " + (app.getAppliedAt() != null ? app.getAppliedAt().toLocalDate() : "Unknown"));
+            dateLabel.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+            info.getChildren().addAll(jobId, dateLabel);
+
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+
+            // TEST 28: Show "Applied ✓" status badge
+            Label statusBadge = new Label("Applied ✓");
+            statusBadge.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-padding: 4 10; -fx-background-radius: 12; -fx-font-weight: bold; -fx-font-size: 11px;");
+
+            row.getChildren().addAll(info, spacer, statusBadge);
+            section.getChildren().add(row);
+        }
     }
 
     private VBox createHeroMetric(String title, String value, String subtitle) {

@@ -4,6 +4,7 @@ import com.athena.parivarpocket.App;
 import com.athena.parivarpocket.model.User;
 import com.athena.parivarpocket.model.UserRole;
 import com.athena.parivarpocket.service.AuthService;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.concurrent.Task;
@@ -13,11 +14,24 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class LoginView {
     private final BorderPane root = new BorderPane();
     private final AuthService authService;
+
+    // Lockout tracking: email -> failed attempt count
+    private static final Map<String, Integer> failedAttempts = new HashMap<>();
+    // Lockout tracking: email -> time when lockout expires
+    private static final Map<String, LocalDateTime> lockoutUntil = new HashMap<>();
+    private static final int MAX_ATTEMPTS = 3;
+    private static final int LOCKOUT_MINUTES = 5;
 
     public LoginView(AuthService authService, Consumer<User> onLogin) {
         this.authService = authService;
@@ -90,6 +104,7 @@ public class LoginView {
         Label errorLabel = new Label();
         errorLabel.getStyleClass().add("danger");
         errorLabel.setVisible(false);
+        errorLabel.setWrapText(true);
 
         Button submitButton = new Button("Submit");
         submitButton.getStyleClass().add("primary-button");
@@ -121,9 +136,22 @@ public class LoginView {
 
         Runnable doLogin = () -> {
             errorLabel.setVisible(false);
-            toggleLoading.accept(true);
-            String email = emailField.getText().trim();
+            String email = emailField.getText().trim().toLowerCase();
             String password = passwordField.getText();
+
+            // --- Lockout check ---
+            if (isLockedOut(email)) {
+                LocalDateTime until = lockoutUntil.get(email);
+                long secondsLeft = java.time.Duration.between(LocalDateTime.now(), until).toSeconds();
+                long minutesLeft = (secondsLeft / 60) + 1;
+                String lockMsg = "Multiple failed attempts. Try again later. (" + minutesLeft + " min remaining)";
+                errorLabel.setText(lockMsg);
+                errorLabel.setVisible(true);
+                showAlert(lockMsg);
+                return;
+            }
+
+            toggleLoading.accept(true);
             UserRole selectedRole = (UserRole) roleGroup.getSelectedToggle().getUserData();
             
             Task<User> authTask = new Task<>() {
@@ -135,6 +163,9 @@ public class LoginView {
 
             authTask.setOnSucceeded(event -> {
                 toggleLoading.accept(false);
+                // Clear failed attempts on success
+                failedAttempts.remove(email);
+                lockoutUntil.remove(email);
                 onLogin.accept(authTask.getValue());
             });
 
@@ -142,9 +173,40 @@ public class LoginView {
                 toggleLoading.accept(false);
                 Throwable cause = authTask.getException();
                 String message = cause == null ? "Authentication failed." : cause.getMessage();
-                errorLabel.setText(message);
-                errorLabel.setVisible(true);
-                showAlert(message);
+
+                // Increment failed attempts
+                int attempts = failedAttempts.getOrDefault(email, 0) + 1;
+                failedAttempts.put(email, attempts);
+
+                if (attempts >= MAX_ATTEMPTS) {
+                    // Lock the account
+                    LocalDateTime unlockTime = LocalDateTime.now().plusMinutes(LOCKOUT_MINUTES);
+                    lockoutUntil.put(email, unlockTime);
+                    failedAttempts.put(email, 0); // reset counter after lockout
+
+                    String lockMsg = "Multiple failed attempts. Try again later. (Locked for " + LOCKOUT_MINUTES + " minutes)";
+                    errorLabel.setText(lockMsg);
+                    errorLabel.setVisible(true);
+                    submitButton.setDisable(true);
+                    showAlert(lockMsg);
+
+                    // Re-enable after lockout period
+                    ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+                    scheduler.schedule(() -> {
+                        lockoutUntil.remove(email);
+                        Platform.runLater(() -> {
+                            submitButton.setDisable(false);
+                            errorLabel.setVisible(false);
+                        });
+                        scheduler.shutdown();
+                    }, LOCKOUT_MINUTES, TimeUnit.MINUTES);
+                } else {
+                    int remaining = MAX_ATTEMPTS - attempts;
+                    String attemptsMsg = message + " (" + remaining + " attempt" + (remaining == 1 ? "" : "s") + " remaining)";
+                    errorLabel.setText(attemptsMsg);
+                    errorLabel.setVisible(true);
+                    showAlert(message);
+                }
             });
 
             new Thread(authTask).start();
@@ -192,13 +254,20 @@ public class LoginView {
         return panel;
     }
 
+    private boolean isLockedOut(String email) {
+        LocalDateTime until = lockoutUntil.get(email);
+        if (until == null) return false;
+        if (LocalDateTime.now().isBefore(until)) return true;
+        // Lockout expired
+        lockoutUntil.remove(email);
+        return false;
+    }
+
     private void showAlert(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR, message, ButtonType.OK);
         alert.setHeaderText("Check your inputs");
         alert.showAndWait();
     }
-
-
 
     private Node buildIllustrationPanel() {
         Image image = new Image(App.class.getResource("/login.png").toExternalForm(), 200, 200, true, true);

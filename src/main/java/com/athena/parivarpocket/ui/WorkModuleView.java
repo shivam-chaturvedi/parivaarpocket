@@ -10,8 +10,11 @@ import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 
 import java.awt.Desktop;
 import java.io.IOException;
@@ -21,11 +24,12 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class WorkModuleView extends VBox {
@@ -41,6 +45,12 @@ public class WorkModuleView extends VBox {
     private final Label appsVal = new Label("0");
     private final Label bookmarkedVal = new Label("0");
 
+    // TEST 24: DB connection status label
+    private final Label dbStatusLabel = new Label("● Connecting...");
+
+    // TEST 28: Track applied jobs in this session
+    private final Set<String> appliedJobIds = new HashSet<>();
+
     private List<JobOpportunity> allJobs = new ArrayList<>();
 
     public WorkModuleView(DataRepository repository) {
@@ -49,6 +59,9 @@ public class WorkModuleView extends VBox {
         setPadding(new Insets(0));
         loadingIndicator.setVisible(false);
         loadingIndicator.setPrefSize(24, 24);
+        
+        // Style the DB status label
+        dbStatusLabel.setStyle("-fx-text-fill: #888; -fx-font-size: 11px; -fx-padding: 4 8;");
         
         getChildren().addAll(buildHeader(), contentHolder);
         fetchJobs();
@@ -123,7 +136,7 @@ public class WorkModuleView extends VBox {
         // Search and Sort
         searchField.setPromptText("Search potential job opportunities available in West-Bengal");
         searchField.getStyleClass().add("job-search-input");
-        searchField.setPrefWidth(600); // Increased width
+        searchField.setPrefWidth(600);
         HBox.setHgrow(searchField, Priority.ALWAYS);
         
         Button searchBtn = new Button("\u2315"); // Magnifying glass
@@ -133,13 +146,13 @@ public class WorkModuleView extends VBox {
         HBox searchBox = new HBox(searchField, searchBtn);
         searchBox.getStyleClass().add("job-search-box");
         searchBox.setAlignment(Pos.CENTER_LEFT);
-        searchBox.setMinWidth(650); // Ensure it's wide
+        searchBox.setMinWidth(650);
 
         Label sortLabel = new Label("Descending Job Salaries Order");
         sortLabel.getStyleClass().add("job-sort-label");
         
         StackPane sortBox = new StackPane(sortLabel);
-        sortBox.getStyleClass().add("job-sort-dropdown"); // Reuse style for similar look
+        sortBox.getStyleClass().add("job-sort-dropdown");
         sortBox.setPrefWidth(300);
         sortBox.setAlignment(Pos.CENTER);
 
@@ -159,7 +172,12 @@ public class WorkModuleView extends VBox {
             HBox.setHgrow(n, Priority.ALWAYS);
         }
 
-        mainContainer.getChildren().addAll(localTitle, new Separator(), controls, metrics);
+        // TEST 24: DB status row at bottom of header
+        HBox statusRow = new HBox();
+        statusRow.setAlignment(Pos.CENTER_RIGHT);
+        statusRow.getChildren().add(dbStatusLabel);
+
+        mainContainer.getChildren().addAll(localTitle, new Separator(), controls, metrics, statusRow);
         header.getChildren().addAll(mainContainer);
         return header;
     }
@@ -189,10 +207,20 @@ public class WorkModuleView extends VBox {
             if (cached != null) {
                 updateJobListing(cached);
             }
+            // TEST 24: Show connected status on success
+            Platform.runLater(() -> {
+                dbStatusLabel.setText("● Connected");
+                dbStatusLabel.setStyle("-fx-text-fill: #4CAF50; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 4 8;");
+            });
             ensureRapidSync();
         });
         task.setOnFailed(event -> {
             setRefreshing(false);
+            // TEST 24: Show disconnected status on failure
+            Platform.runLater(() -> {
+                dbStatusLabel.setText("● Disconnected");
+                dbStatusLabel.setStyle("-fx-text-fill: #f44336; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 4 8;");
+            });
             ensureRapidSync();
         });
         new Thread(task).start();
@@ -235,7 +263,7 @@ public class WorkModuleView extends VBox {
                         job.getCompany().toLowerCase().contains(term))
                 .collect(Collectors.toList());
 
-        // Always sort by descending salary as per user request ("in filter only lkeep taaht descending one aonly")
+        // Always sort by descending salary
         filtered.sort((a, b) -> Double.compare(b.getSalaryMax() != null ? b.getSalaryMax() : 0, 
                                               a.getSalaryMax() != null ? a.getSalaryMax() : 0));
         
@@ -271,10 +299,22 @@ public class WorkModuleView extends VBox {
 
         VBox actions = new VBox(8);
         actions.setAlignment(Pos.CENTER_RIGHT);
-        
-        Button applyBtn = new Button("Apply Now");
+
+        // TEST 28: Show "Applied ✓" if already applied, otherwise "Apply Now"
+        boolean alreadyApplied = appliedJobIds.contains(job.getId());
+        Button applyBtn = new Button(alreadyApplied ? "Applied \u2713" : "Apply Now");
         applyBtn.getStyleClass().add("job-apply-dark-btn");
-        applyBtn.setOnAction(e -> handleJobApply(job));
+        if (alreadyApplied) {
+            applyBtn.setDisable(true);
+            applyBtn.setStyle("-fx-opacity: 0.7;");
+        }
+        applyBtn.setOnAction(e -> {
+            handleJobApply(job);
+            appliedJobIds.add(job.getId());
+            applyBtn.setText("Applied \u2713");
+            applyBtn.setDisable(true);
+            applyBtn.setStyle("-fx-opacity: 0.7;");
+        });
 
         Button saveBtn = new Button(isFav ? "\uD83D\uDD16 Saved" : "\uD83D\uDD16 Save");
         saveBtn.getStyleClass().add("job-save-white-btn");
@@ -283,7 +323,12 @@ public class WorkModuleView extends VBox {
             refreshListings();
         });
 
-        actions.getChildren().addAll(applyBtn, saveBtn);
+        // TEST 26: "View Details" button to open job detail dialog
+        Button detailBtn = new Button("View Details");
+        detailBtn.getStyleClass().add("outline-button");
+        detailBtn.setOnAction(e -> showJobDetailDialog(job));
+
+        actions.getChildren().addAll(applyBtn, saveBtn, detailBtn);
 
         topRow.getChildren().addAll(info, actions);
         card.getChildren().add(topRow);
@@ -291,9 +336,115 @@ public class WorkModuleView extends VBox {
         return card;
     }
 
+    /**
+     * TEST 26: Show a detailed job dialog with all fields:
+     * title, location, salary, category, required skills, working hours, safety guidance, contact info.
+     */
+    private void showJobDetailDialog(JobOpportunity job) {
+        Stage dialog = new Stage();
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.setTitle(job.getTitle());
+
+        VBox root = new VBox();
+        root.getStyleClass().add("quiz-container");
+
+        // Header
+        HBox header = new HBox(new Label(job.getTitle()));
+        header.getStyleClass().add("modal-header");
+
+        VBox body = new VBox(16);
+        body.setPadding(new Insets(24));
+
+        // Company and category
+        Label companyLabel = new Label(job.getCompany());
+        companyLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+        Label categoryLabel = new Label("Category: " + job.getCategory());
+        categoryLabel.setStyle("-fx-text-fill: #555;");
+
+        Separator sep1 = new Separator();
+
+        // Location
+        addDetailRow(body, "\uD83D\uDCCD Location", job.getLocation() + (job.getLocality() != null && !job.getLocality().isBlank() ? ", " + job.getLocality() : ""));
+
+        // Salary
+        addDetailRow(body, "\uD83D\uDCB0 Salary", job.getSalaryDescription());
+
+        // Working Hours
+        addDetailRow(body, "\u23F0 Working Hours", job.getWorkingHours() != null && !job.getWorkingHours().isBlank() ? job.getWorkingHours() : "Not specified");
+
+        // Required Skills
+        String skills = job.getRequiredSkills() != null && !job.getRequiredSkills().isEmpty()
+                ? String.join(", ", job.getRequiredSkills())
+                : "Not specified";
+        addDetailRow(body, "\uD83D\uDCCB Required Skills", skills);
+
+        // Safety Guidance
+        String safety = job.getSafetyGuidance() != null && !job.getSafetyGuidance().isBlank()
+                ? job.getSafetyGuidance()
+                : "Standard workplace safety practices apply.";
+        addDetailRow(body, "\uD83D\uDEE1 Safety Guidance", safety);
+
+        // Contact Info
+        String contact = job.getContactInfo() != null && !job.getContactInfo().isBlank()
+                ? job.getContactInfo()
+                : "Apply via the link below.";
+        addDetailRow(body, "\uD83D\uDCDE Contact", contact);
+
+        Separator sep2 = new Separator();
+
+        // Footer buttons
+        HBox footer = new HBox(12);
+        footer.setAlignment(Pos.CENTER_RIGHT);
+
+        boolean alreadyApplied = appliedJobIds.contains(job.getId());
+        Button applyBtn = new Button(alreadyApplied ? "Applied \u2713" : "Apply Now");
+        applyBtn.getStyleClass().add("job-apply-dark-btn");
+        if (alreadyApplied) {
+            applyBtn.setDisable(true);
+        }
+        applyBtn.setOnAction(e -> {
+            handleJobApply(job);
+            appliedJobIds.add(job.getId());
+            applyBtn.setText("Applied \u2713");
+            applyBtn.setDisable(true);
+            refreshListings();
+        });
+
+        Button closeBtn = new Button("Close");
+        closeBtn.getStyleClass().add("outline-button");
+        closeBtn.setOnAction(e -> dialog.close());
+
+        footer.getChildren().addAll(applyBtn, closeBtn);
+
+        body.getChildren().addAll(0, List.of(companyLabel, categoryLabel, sep1));
+        body.getChildren().addAll(sep2, footer);
+
+        ScrollPane scroll = new ScrollPane(body);
+        scroll.setFitToWidth(true);
+        scroll.setPrefHeight(500);
+
+        root.getChildren().addAll(header, scroll);
+
+        Scene scene = new Scene(root, 650, 580);
+        scene.getStylesheets().add(getClass().getResource("/styles.css").toExternalForm());
+        dialog.setScene(scene);
+        dialog.showAndWait();
+    }
+
+    private void addDetailRow(VBox container, String label, String value) {
+        VBox row = new VBox(4);
+        Label lbl = new Label(label);
+        lbl.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
+        Label val = new Label(value != null ? value : "Not specified");
+        val.setWrapText(true);
+        val.setStyle("-fx-text-fill: #333; -fx-font-size: 13px;");
+        row.getChildren().addAll(lbl, val);
+        container.getChildren().add(row);
+    }
+
     private void updateMetrics(int favCount) {
         availableJobsVal.setText(String.valueOf(allJobs.size()));
-        appsVal.setText("0"); // Assume 0 for now as per mockup
+        appsVal.setText(String.valueOf(appliedJobIds.size()));
         bookmarkedVal.setText(String.valueOf(favCount));
     }
 

@@ -1338,6 +1338,9 @@ public class DataRepository {
 
         // 3. Award coins as incentive
         awardParivaarPoints(user, 50, "Job Application: " + job.getTitle());
+
+        // Tests 38-39: Check and log alerts for educator
+        CompletableFuture.runAsync(() -> checkAndLogStudentAlerts(user));
     }
 
     public void logStudentActivity(User user, String activityType, JsonObject activityData) {
@@ -1354,6 +1357,60 @@ public class DataRepository {
             safeInsertRecord("student_activity_logs", null, payload, user.getAccessToken());
         } catch (Exception e) {
             System.err.println("[DataRepository] Unable to log student activity: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Tests 38-39: Check student metrics and log alerts for educator notifications.
+     * Called after job applications and quiz completions.
+     */
+    public void checkAndLogStudentAlerts(User user) {
+        if (user == null || user.getEmail() == null) return;
+        try {
+            String email = user.getEmail().toLowerCase(java.util.Locale.ROOT);
+
+            // Test 38: Low job activity alert
+            List<JobApplication> apps = fetchJobApplications(email);
+            List<String> savedJobIds = fetchFavoriteJobIds(user);
+            if (apps.size() < 2 && savedJobIds.size() < 2) {
+                JsonObject meta = new JsonObject();
+                meta.addProperty("applications", apps.size());
+                meta.addProperty("bookmarks", savedJobIds.size());
+                logAlert(user, "Low Job Activity",
+                    "Student has few job applications (" + apps.size() + ") and bookmarks (" + savedJobIds.size() + "). Encourage exploration.",
+                    "info", meta);
+            }
+
+            // Test 39: Low quiz scores or missing modules alert
+            List<QuizAttempt> attempts = fetchQuizAttemptsByEmail(email);
+            List<Lesson> lessons = getLessons();
+            List<LessonCompletion> completions = fetchLessonCompletionsByEmail(email);
+
+            double avgScore = attempts.stream()
+                    .mapToDouble(a -> (double) a.getScore() / Math.max(a.getMaxScore(), 1) * 100)
+                    .average().orElse(100.0); // Default 100 if no attempts yet
+
+            double completionRate = lessons.isEmpty() ? 1.0 : (double) completions.size() / lessons.size();
+
+            if (avgScore < 50.0 && !attempts.isEmpty()) {
+                JsonObject meta = new JsonObject();
+                meta.addProperty("average_score", Math.round(avgScore));
+                meta.addProperty("quizzes_taken", attempts.size());
+                logAlert(user, "Low Quiz Performance",
+                    "Student's average quiz score is " + Math.round(avgScore) + "%. Additional support may be needed.",
+                    "warning", meta);
+            }
+
+            if (completionRate < 0.30 && !lessons.isEmpty()) {
+                JsonObject meta = new JsonObject();
+                meta.addProperty("modules_completed", completions.size());
+                meta.addProperty("total_modules", lessons.size());
+                logAlert(user, "Missing Modules",
+                    "Student has completed only " + completions.size() + " of " + lessons.size() + " modules. Encourage engagement.",
+                    "warning", meta);
+            }
+        } catch (Exception e) {
+            System.err.println("[DataRepository] checkAndLogStudentAlerts failed: " + e.getMessage());
         }
     }
 

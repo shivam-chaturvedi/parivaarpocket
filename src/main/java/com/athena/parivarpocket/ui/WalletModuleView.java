@@ -177,21 +177,33 @@ public class WalletModuleView extends VBox {
         savingsValue.setText("₹" + Math.round(totalSavings));
         balanceValue.setText("₹" + Math.round(netBalance));
         
+        // TEST 36: Three-state balance color: green (surplus >10%), yellow (stable 0-10%), red (deficit)
+        double surplusRatio = income > 0 ? netBalance / income : (netBalance >= 0 ? 1 : -1);
         if (netBalance < 0) {
-            balanceValue.setStyle("-fx-text-fill: #d32f2f;");
+            // Deficit — red
+            balanceValue.setStyle("-fx-text-fill: #d32f2f; -fx-font-weight: bold;");
+        } else if (surplusRatio <= 0.10) {
+            // Stable — yellow (within 10% margin)
+            balanceValue.setStyle("-fx-text-fill: #F57C00; -fx-font-weight: bold;");
         } else {
-            balanceValue.setStyle("-fx-text-fill: #2e7d32;");
+            // Surplus — green
+            balanceValue.setStyle("-fx-text-fill: #2e7d32; -fx-font-weight: bold;");
         }
 
         // Update status - compare expenses against budget limit (if set) or income
         double balance = budgetLimit - expenses;
         if (balance < 0) {
-            budgetStatusTitle.setText(String.format("Budget = %d , Budget Deficit!", Math.round(budgetLimit)));
+            budgetStatusTitle.setText(String.format("Budget = ₹%d — Budget Deficit!", Math.round(budgetLimit)));
             budgetStatusMsg.setText(String.format("Your expenses (₹%d) exceed your set budget (₹%d). Consider reducing spending.", 
                 Math.round(expenses), Math.round(budgetLimit)));
             budgetStatusTitle.setStyle("-fx-text-fill: #d32f2f;");
+        } else if (surplusRatio <= 0.10) {
+            budgetStatusTitle.setText(String.format("Budget = ₹%d — Budget Stable", Math.round(budgetLimit)));
+            budgetStatusMsg.setText(String.format("You are close to your budget limit. Expenses (₹%d) are near your limit (₹%d).",
+                Math.round(expenses), Math.round(budgetLimit)));
+            budgetStatusTitle.setStyle("-fx-text-fill: #F57C00;");
         } else {
-            budgetStatusTitle.setText(String.format("Budget = %d , Budget Surplus!", Math.round(budgetLimit)));
+            budgetStatusTitle.setText(String.format("Budget = ₹%d — Budget Surplus!", Math.round(budgetLimit)));
             budgetStatusMsg.setText(String.format("You are within your budget. Your expenses (₹%d) are within your set limit (₹%d).", 
                 Math.round(expenses), Math.round(budgetLimit)));
             budgetStatusTitle.setStyle("-fx-text-fill: #2e7d32;");
@@ -254,28 +266,44 @@ public class WalletModuleView extends VBox {
 
     private void updateRecommendations(double income, double expenses) {
         optimizationItems.getChildren().clear();
-        
+
+        // TEST 40-41: Only show tips when there are real issues; hide section when budget is healthy
+        boolean hasIssues = false;
+
         // Dynamic Recommendations based on categories
         Map<String, Double> cats = walletEntries.stream()
             .filter(e -> e.getType() == WalletEntryType.EXPENSE)
             .collect(Collectors.groupingBy(WalletEntry::getCategory, Collectors.summingDouble(WalletEntry::getAmount)));
 
-        if (cats.containsKey("Food & Groceries") && cats.get("Food & Groceries") > income * 0.3) {
+        // Only show food tip if actually overspending on food
+        if (cats.containsKey("Food & Groceries") && income > 0 && cats.get("Food & Groceries") > income * 0.3) {
             addRecommendation("Reduce Food & Groceries spending by ₹400 through meal planning and bulk purchases");
-        } else {
-            addRecommendation("Great job on managing food costs! Keep it up.");
+            hasIssues = true;
         }
 
         if (cats.containsKey("Transportation") && cats.get("Transportation") > 500) {
             addRecommendation("Save ₹150 on Transportation by using public transport more often");
+            hasIssues = true;
         }
 
-        if (cats.containsKey("Entertainment")) {
+        if (cats.containsKey("Entertainment") && income > 0 && cats.get("Entertainment") > income * 0.15) {
             addRecommendation("Cut Entertainment expenses by ₹200 with free community activities");
+            hasIssues = true;
         }
-        
-        if (optimizationItems.getChildren().isEmpty()) {
-            addRecommendation("Continue tracking your expenses to get personalized optimization tips.");
+
+        // Overall overspending tip
+        if (income > 0 && expenses > income) {
+            addRecommendation("Your total expenses exceed your income. Review and cut non-essential spending.");
+            hasIssues = true;
+        }
+
+        // TEST 41: When budget is healthy, show a positive message instead of tips
+        if (!hasIssues) {
+            if (walletEntries.isEmpty()) {
+                addRecommendation("Start recording your income and expenses to get personalized optimization tips.");
+            } else {
+                addRecommendation("\u2705 Your budget is healthy! Keep up the great financial habits.");
+            }
         }
     }
 
@@ -342,6 +370,21 @@ public class WalletModuleView extends VBox {
                 walletEntries.add(0, entry);
                 refreshAllSections();
                 stage.close();
+
+                // TEST 37: Check for overspending after adding entry and log alert for educator
+                if (type == WalletEntryType.EXPENSE) {
+                    double currentIncome = repository.calculateIncome(walletEntries);
+                    double currentExpenses = repository.calculateExpenses(walletEntries);
+                    if (currentExpenses > currentIncome && currentIncome > 0) {
+                        JsonObject meta = new JsonObject();
+                        meta.addProperty("income", currentIncome);
+                        meta.addProperty("expenses", currentExpenses);
+                        meta.addProperty("deficit", currentExpenses - currentIncome);
+                        repository.logAlert(user, "Overspending",
+                            "Student's expenses (\u20b9" + Math.round(currentExpenses) + ") exceed income (\u20b9" + Math.round(currentIncome) + ")",
+                            "warning", meta);
+                    }
+                }
             } catch (Exception ex) {
                 new Alert(Alert.AlertType.ERROR, "Invalid amount").show();
             }
