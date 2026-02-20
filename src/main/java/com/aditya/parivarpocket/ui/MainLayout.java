@@ -1,0 +1,162 @@
+package com.aditya.parivarpocket.ui;
+
+import com.aditya.parivarpocket.model.MainTab;
+import com.aditya.parivarpocket.model.User;
+import com.aditya.parivarpocket.model.UserRole;
+import com.aditya.parivarpocket.service.DataRepository;
+import com.aditya.parivarpocket.service.OfflineSyncService;
+import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.scene.Node;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+
+import java.util.concurrent.CompletableFuture;
+
+public class MainLayout {
+    private final BorderPane root = new BorderPane();
+    private final User user;
+    private final DataRepository repository;
+    private final OfflineSyncService offlineSyncService;
+    private MainTab activeTab = MainTab.DASHBOARD;
+    private final Runnable onLogout;
+    private final StackPane centerWrapper = new StackPane();
+
+    public MainLayout(User user,
+                      DataRepository repository,
+                      OfflineSyncService offlineSyncService,
+                      Runnable onLogout) {
+        this.user = user;
+        this.repository = repository;
+        this.offlineSyncService = offlineSyncService;
+        this.onLogout = onLogout;
+        root.setCenter(centerWrapper);
+        
+        // Show UI instantly with loading placeholder
+        renderSkeleton();
+        
+        // Load data asynchronously in background
+        CompletableFuture.runAsync(() -> {
+            repository.prefetchAll(user);
+        }).thenRun(() -> Platform.runLater(this::render));
+    }
+    
+    private void renderSkeleton() {
+        SidebarView sidebar = new SidebarView(user, activeTab, this::setActiveTab, onLogout, offlineSyncService);
+        root.setLeft(sidebar);
+        root.setTop(null);
+        
+        // Show loading placeholder
+        VBox loadingPlaceholder = new VBox(20);
+        loadingPlaceholder.setStyle("-fx-alignment: center; -fx-padding: 40px;");
+        javafx.scene.control.Label loadingLabel = new javafx.scene.control.Label("Loading dashboard...");
+        loadingLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: #666;");
+        loadingPlaceholder.getChildren().add(loadingLabel);
+        centerWrapper.getChildren().setAll(loadingPlaceholder);
+    }
+
+    public BorderPane getView() {
+        return root;
+    }
+
+    private void render() {
+        SidebarView sidebar = new SidebarView(user, activeTab, this::setActiveTab, onLogout, offlineSyncService);
+        root.setLeft(sidebar);
+        root.setTop(null);
+        root.setCenter(centerWrapper);
+        refreshContent();
+    }
+
+    private Node buildScrollableContent(MainTab tab) {
+        String title = titleFor(tab);
+        String desc = descriptionFor(tab);
+        
+        // Only show refresh button for Dashboard and Learning
+        Runnable refreshAction = null;
+        if (tab == MainTab.DASHBOARD || tab == MainTab.LEARNING) {
+            refreshAction = () -> triggerManualRefresh(user);
+        }
+
+        VBox container = new VBox(18, new PageHeader(title, desc, refreshAction), contentForTab(tab));
+        container.setPadding(new Insets(16, 24, 24, 24));
+        ScrollPane scrollPane = new ScrollPane(container);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.getStyleClass().add("content-scroll");
+        return scrollPane;
+    }
+
+    private void triggerManualRefresh(User user) {
+        // Clear caches to force fetch
+        tabContentCache.clear();
+        
+        CompletableFuture.runAsync(() -> {
+            repository.prefetchAll(user);
+            Platform.runLater(this::refreshContent);
+        });
+    }
+
+    private String titleFor(MainTab tab) {
+        return switch (tab) {
+            case DASHBOARD -> user.getRole() == UserRole.STUDENT ? "Student Dashboard" : "Educator Dashboard";
+            case LEARNING -> "Financial learning";
+            case WORK -> "Employment opportunities";
+            case WALLET -> "Budget management";
+            case NOTIFICATIONS -> "Alerts & reminders";
+        };
+    }
+
+    private String descriptionFor(MainTab tab) {
+        return switch (tab) {
+            case DASHBOARD -> "Overview of your progress and activities";
+            case LEARNING -> "Interactive lessons, quizzes, and ParivaarCoins";
+            case WORK -> "Verified, safe local jobs updated every 24 hours";
+            case WALLET -> "Record income, expenses, savings, and get alerts";
+            case NOTIFICATIONS -> "Alerts from educators, wallet, and job board";
+        };
+    }
+
+    private void setActiveTab(MainTab tab) {
+        if (this.activeTab == tab) {
+            return;
+        }
+        this.activeTab = tab;
+        render();
+    }
+
+    private final java.util.Map<MainTab, Node> tabContentCache = new java.util.EnumMap<>(MainTab.class);
+
+    private Node contentForTab(MainTab tab) {
+        // Special case: Always refresh Student Dashboard to show latest bookmarked jobs
+        if (tab == MainTab.DASHBOARD && user.getRole() == UserRole.STUDENT) {
+            Node dashboard = new StudentDashboardView(user, repository);
+            tabContentCache.put(tab, dashboard);
+            return dashboard;
+        }
+
+        if (tabContentCache.containsKey(tab)) {
+            return tabContentCache.get(tab);
+        }
+
+        Node content = switch (tab) {
+            case DASHBOARD -> new EducatorDashboardView(repository);
+            case LEARNING -> new LearningModuleView(repository);
+            case WORK -> new WorkModuleView(repository);
+            case WALLET -> new WalletModuleView(repository, user, offlineSyncService);
+            case NOTIFICATIONS -> new NotificationsView(repository);
+        };
+        
+        tabContentCache.put(tab, content);
+        return content;
+    }
+
+    private void refreshContent() {
+        showContent(buildScrollableContent(activeTab));
+    }
+
+    private void showContent(Node content) {
+        centerWrapper.getChildren().setAll(content);
+    }
+}
