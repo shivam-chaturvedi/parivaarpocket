@@ -1,5 +1,6 @@
 package com.aditya.parivarpocket.ui;
 
+import com.aditya.parivarpocket.model.JobApplication;
 import com.aditya.parivarpocket.model.JobOpportunity;
 import com.aditya.parivarpocket.model.User;
 import com.aditya.parivarpocket.service.DataRepository;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -232,6 +234,7 @@ public class WorkModuleView extends VBox {
                 dbStatusLabel.setStyle("-fx-text-fill: #4CAF50; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 4 8;");
             });
             ensureRapidSync();
+            loadAppliedJobsFromSupabase();
         });
         task.setOnFailed(event -> {
             setRefreshing(false);
@@ -243,6 +246,26 @@ public class WorkModuleView extends VBox {
             ensureRapidSync();
         });
         new Thread(task).start();
+    }
+
+    private void loadAppliedJobsFromSupabase() {
+        User user = repository.getCurrentUser();
+        if (user == null) {
+            return;
+        }
+
+        CompletableFuture.runAsync(() -> {
+            List<JobApplication> applications = repository.fetchJobApplications(user.getEmail());
+            Set<String> jobIds = applications.stream()
+                    .map(JobApplication::getJobId)
+                    .filter(id -> id != null && !id.isBlank())
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            Platform.runLater(() -> {
+                appliedJobIds.clear();
+                appliedJobIds.addAll(jobIds);
+                refreshListings();
+            });
+        });
     }
 
     private void refreshListings() {
